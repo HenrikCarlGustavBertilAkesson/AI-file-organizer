@@ -77,6 +77,62 @@ def save_files(files: list[File]):
     connection.commit()
     connection.close()
 
+def save_file(file: File):
+    connection = get_connection()
+
+    connection.execute("""
+        INSERT INTO files (
+            path,
+            filename,
+            extension,
+            size,
+            modified,
+            hash,
+            content,
+            category,
+            subcategory,
+            description,
+            confidence,
+            status,
+            error
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+        ON CONFLICT(path) DO UPDATE SET
+
+            filename = excluded.filename,
+            extension = excluded.extension,
+            size = excluded.size,
+            modified = excluded.modified,
+            hash = excluded.hash,
+            content = excluded.content,
+
+            category = excluded.category,
+            subcategory = excluded.subcategory,
+            description = excluded.description,
+            confidence = excluded.confidence,
+
+            status = excluded.status,
+            error = excluded.error
+    """, (
+        file.path,
+        file.filename,
+        file.extension,
+        file.size,
+        file.modified,
+        file.hash,
+        file.content,
+        file.category,
+        file.subcategory,
+        file.description,
+        file.confidence,
+        file.status,
+        file.error,
+    ))
+
+    connection.commit()
+    connection.close()
+
 def get_file_by_path(path: str):
     connection = get_connection()
 
