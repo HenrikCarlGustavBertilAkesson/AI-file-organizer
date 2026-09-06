@@ -14,7 +14,7 @@ def calculate_hash(path: Path) -> str:
 
 
 def scan_directory(directory: str):
-    root = Path(directory).expanduser()
+    root = Path(directory).expanduser().resolve()
 
     if not root.exists():
         raise ValueError(f"Directory does not exist: {directory}")

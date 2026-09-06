@@ -19,3 +19,19 @@ class File:
 
     status: str = ""
     error: str = ""
+
+@dataclass
+class ProposedAction:
+    action_type: str
+    source: str
+    destination: str
+    reason: str
+
+    approved: bool = False
+    executed: bool = False
+    error: str = ""
+
+@dataclass
+class AgentResult:
+    message: str
+    proposed_actions: list[ProposedAction]

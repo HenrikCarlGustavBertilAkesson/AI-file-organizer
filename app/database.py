@@ -150,3 +150,17 @@ def get_file_by_path(path: str):
         return None
 
     return dict(result)
+
+def get_all_files():
+    connection = get_connection()
+
+    connection.row_factory = sqlite3.Row
+
+    rows = connection.execute("""
+        SELECT *
+        FROM files
+    """).fetchall()
+
+    connection.close()
+
+    return [dict(row) for row in rows]
