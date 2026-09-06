@@ -1,10 +1,12 @@
-from scanner import scan_directory
+from scanner import scan_directory, scan_file
 from extractor import extract_text
 from database import get_all_files
 from pathlib import Path
 from ai.classifier import classify_file
 from extractor import extract_text
 from models import ProposedAction
+from processor import process_file
+
 
 MAX_TOOL_CONTENT_LENGTH = 20_000
 
@@ -63,28 +65,17 @@ def get_indexed_files() -> list[dict]:
     ]
 
 def classify_path(path: str) -> dict:
-    file_path = Path(path)
+    file = scan_file(path)
 
-    content = extract_text(path)
-
-    if not content.strip():
-        return {
-            "path": path,
-            "error": "No readable content found.",
-        }
-
-    classification = classify_file(
-        filename=file_path.name,
-        extension=file_path.suffix.lower(),
-        content=content,
-    )
+    processed_file = process_file(file)
 
     return {
-        "path": path,
-        "category": classification.category,
-        "subcategory": classification.subcategory,
-        "description": classification.description,
-        "confidence": classification.confidence,
+        "path": processed_file.path,
+        "category": processed_file.category,
+        "subcategory": processed_file.subcategory,
+        "description": processed_file.description,
+        "confidence": processed_file.confidence,
+        "status": processed_file.status,
     }
 
 def propose_move(source: str, destination: str, reason: str) -> ProposedAction:

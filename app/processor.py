@@ -1,7 +1,7 @@
 from extractor import extract_text, is_supported
 from database import get_file_by_path, save_file
 from ai.classifier import classify_file
-from models import File
+from models import File, ActionStatus
 
 
 def process_file(file: File):
@@ -23,7 +23,7 @@ def process_file(file: File):
     if not is_supported(file.path):
         print("  → Unsupported file type.")
 
-        file.status = "unsupported"
+        file.status = ActionStatus.UNSUPPORTED
         file.error = None
 
         save_file(file)
@@ -39,7 +39,7 @@ def process_file(file: File):
         if not content.strip():
             print("  → No readable text.")
 
-            file.status = "empty"
+            file.status = ActionStatus.EMPTY
             file.error = None
 
             save_file(file)
@@ -61,7 +61,7 @@ def process_file(file: File):
         file.description = classification.description
         file.confidence = classification.confidence
 
-        file.status = "classified"
+        file.status = ActionStatus.CLASSIFIED
         file.error = None
 
         save_file(file)
@@ -71,7 +71,7 @@ def process_file(file: File):
     except Exception as error:
         print(f"  → FAILED: {error}")
 
-        file.status = "failed"
+        file.status = ActionStatus.FAILED
         file.error = str(error)
 
         save_file(file)

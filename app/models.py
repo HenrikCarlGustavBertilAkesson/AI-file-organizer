@@ -1,5 +1,16 @@
 from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
 
+class ActionStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    FAILED = "failed"
+    EXECUTED = "executed"
+    UNSUPPORTED = "unsupported"
+    EMPTY = "empty"
+    CLASSIFIED = "classified"
 
 @dataclass
 class File:
@@ -20,6 +31,8 @@ class File:
     status: str = ""
     error: str = ""
 
+    is_present: bool = True
+
 @dataclass
 class ProposedAction:
     action_type: str
@@ -27,8 +40,8 @@ class ProposedAction:
     destination: str
     reason: str
 
-    approved: bool = False
-    executed: bool = False
+    id: Optional[int] = None
+    status: str = ActionStatus.PENDING
     error: str = ""
 
 @dataclass

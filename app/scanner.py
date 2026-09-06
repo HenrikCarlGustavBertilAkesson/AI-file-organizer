@@ -12,6 +12,25 @@ def calculate_hash(path: Path) -> str:
 
     return hasher.hexdigest()
 
+def scan_file(path: str) -> File:
+    file_path = Path(path).expanduser().resolve()
+
+    if not file_path.exists():
+        raise ValueError(f"File does not exist: {path}")
+
+    if not file_path.is_file():
+        raise ValueError(f"Not a file: {path}")
+
+    stat = file_path.stat()
+
+    return File(
+        path=str(file_path),
+        filename=file_path.name,
+        extension=file_path.suffix.lower(),
+        size=stat.st_size,
+        modified=stat.st_mtime,
+        hash=calculate_hash(file_path),
+    )
 
 def scan_directory(directory: str):
     root = Path(directory).expanduser().resolve()
@@ -25,24 +44,10 @@ def scan_directory(directory: str):
     files = []
 
     for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-
-        try:
-            stat = path.stat()
-
-            files.append(
-                File(
-                    path=str(path.resolve()),
-                    filename=path.name,
-                    extension=path.suffix.lower(),
-                    size=stat.st_size,
-                    modified=stat.st_mtime,
-                    hash=calculate_hash(path),
-                )
-            )
-
-        except OSError as error:
-            print(f"Could not scan {path}: {error}")
+        if path.is_file():
+            try:
+                files.append(scan_file(str(path)))
+            except OSError as error:
+                print(f"Could not scan {path}: {error}")
 
     return files

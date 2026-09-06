@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 
-from models import ProposedAction
+from models import ProposedAction, ActionStatus
 from actions.validator import validate_action
 
 
@@ -10,7 +10,7 @@ def execute_action(
     allowed_root: str,
 ) -> bool:
 
-    if not action.approved:
+    if action.status != ActionStatus.APPROVED:
         action.error = "Action has not been approved."
         return False
 
@@ -20,6 +20,7 @@ def execute_action(
     )
 
     if not valid:
+        action.status = ActionStatus.FAILED
         action.error = error
         return False
 
@@ -37,11 +38,13 @@ def execute_action(
             str(destination),
         )
 
-        action.executed = True
+        action.status = ActionStatus.EXECUTED
         action.error = ""
 
         return True
 
     except Exception as error:
+        action.status = ActionStatus.FAILED
         action.error = str(error)
+
         return False
