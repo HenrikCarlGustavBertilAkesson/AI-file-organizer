@@ -1,6 +1,9 @@
 from openai import OpenAI
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 
 client = OpenAI()
 
