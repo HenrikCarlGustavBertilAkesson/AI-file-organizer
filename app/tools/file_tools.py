@@ -49,7 +49,8 @@ def read_file(path: str) -> dict:
     }
 
 def get_indexed_files() -> list[dict]:
-    files = get_all_files()
+    files = get_all_files(columns=('path', 'filename', 'category', 'subcategory',
+                                   'description', 'confidence', 'status'))
 
     return [
         {

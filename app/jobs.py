@@ -97,7 +97,9 @@ class JobManager:
             progress(message='Starting…', force=True)
             result = self.runner(operation, parameters, progress=progress)
             # Large file/action tables are refreshed separately by the UI.
-            result = {key: value for key, value in result.items() if key not in ('files', 'actions')}
+            result = {key: value for key, value in result.items()
+                      if key not in ('files', 'actions', 'summary', 'categories',
+                                     'pagination', 'action_pagination')}
             update(job_id, status='succeeded', result=json.dumps(result),
                    message=result.get('message') or 'Completed.')
         except JobCancelled as error:

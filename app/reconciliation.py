@@ -15,7 +15,7 @@ def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None
     scanned_files = (scan_directory(str(root), scope=scope, progress=progress)
                      if scope or progress else scan_directory(str(root)))
     if not apply:
-        return compare_files(root, scanned_files, get_all_files(), scope=scope)
+        return compare_files(root, scanned_files, get_all_files(columns=('path', 'hash', 'is_present')), scope=scope)
 
     # Read and repair the index under one write transaction. Scanning must
     # finish successfully before we acquire the lock or change any records.
@@ -24,7 +24,7 @@ def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None
     with closing(get_connection()) as connection:
         with connection:
             connection.execute("BEGIN IMMEDIATE")
-            indexed_files = get_all_files(connection)
+            indexed_files = get_all_files(connection, columns=('path', 'hash', 'is_present'))
             result = compare_files(root, scanned_files, indexed_files, scope=scope)
             scanned_by_path = {file.path: file for file in scanned_files}
             indexed_by_path = {row["path"]: row for row in indexed_files}

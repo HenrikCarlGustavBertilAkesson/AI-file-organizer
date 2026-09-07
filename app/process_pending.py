@@ -31,7 +31,7 @@ def process_pending(directory: str, *, retry_failed: bool = False, progress=None
     statuses = {"pending", "failed"} if retry_failed else {"pending"}
     summary = ProcessingSummary()
     scope = load_scope(root)
-    candidates = [row for row in get_all_files()
+    candidates = [row for row in get_all_files(columns=('path', 'status', 'is_present'))
                   if row['is_present'] and row['status'] in statuses
                   and Path(row['path']).is_relative_to(root)
                   and (scope is None or scope.allows(row['path']))]
