@@ -1,4 +1,6 @@
 import sqlite3
+from contextlib import closing
+from migrations import migrate
 from models import File, ProposedAction, ActionStatus
 from pathlib import Path
 
@@ -9,97 +11,20 @@ def get_connection():
 
 
 def create_database():
-    connection = get_connection()
-
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS files (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            path TEXT UNIQUE NOT NULL,
-            filename TEXT NOT NULL,
-            extension TEXT,
-
-            size INTEGER,
-            modified REAL,
-            hash TEXT,
-
-            content TEXT,
-
-            category TEXT,
-            subcategory TEXT,
-            description TEXT,
-            confidence REAL,
-
-            status TEXT,
-            error TEXT,
-
-            is_present INTEGER NOT NULL DEFAULT 1
-        )
-    """)
-
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS actions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            action_type TEXT NOT NULL,
-            source TEXT NOT NULL,
-            destination TEXT NOT NULL,
-            reason TEXT,
-
-            status TEXT NOT NULL DEFAULT 'pending',
-            error TEXT,
-
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    connection.commit()
-    connection.close()
+    """Create or upgrade the index while preserving existing records."""
+    with closing(get_connection()) as connection:
+        migrate(connection)
 
 def save_files(files: list[File]):
-    connection = sqlite3.connect(DATABASE)
+    # Upserts preserve row IDs and fire the search-index update triggers.
+    with closing(get_connection()) as connection, connection:
+        for file in files:
+            save_file(file, connection)
 
-    data = [
-        (
-            file.path,
-            file.filename,
-            file.extension,
-            file.size,
-            file.modified,
-            file.content,
-            file.category,
-            file.subcategory,
-            file.description,
-            file.confidence,
-            int(file.is_present)
-        )
-        for file in files
-    ]
-
-    connection.executemany("""
-        INSERT OR REPLACE INTO files
-        (
-            path,
-            filename,
-            extension,
-            size,
-            modified,
-            content,
-            category,
-            subcategory,
-            description,
-            confidence,
-            is_present
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, data)
-
-    connection.commit()
-    connection.close()
-
-def save_file(file: File):
-    connection = get_connection()
+def save_file(file: File, connection=None):
+    owns_connection = connection is None
+    if owns_connection:
+        connection = get_connection()
 
     connection.execute("""
         INSERT INTO files (
@@ -135,7 +60,8 @@ def save_file(file: File):
             confidence = excluded.confidence,
 
             status = excluded.status,
-            error = excluded.error
+            error = excluded.error,
+            is_present = excluded.is_present
     """, (
         file.path,
         file.filename,
@@ -153,8 +79,9 @@ def save_file(file: File):
         int(file.is_present),
     ))
 
-    connection.commit()
-    connection.close()
+    if owns_connection:
+        connection.commit()
+        connection.close()
 
 def get_file_by_path(path: str):
     connection = get_connection()
@@ -174,8 +101,10 @@ def get_file_by_path(path: str):
 
     return dict(result)
 
-def get_all_files():
-    connection = get_connection()
+def get_all_files(connection=None):
+    owns_connection = connection is None
+    if owns_connection:
+        connection = get_connection()
 
     connection.row_factory = sqlite3.Row
 
@@ -184,7 +113,8 @@ def get_all_files():
         FROM files
     """).fetchall()
 
-    connection.close()
+    if owns_connection:
+        connection.close()
 
     return [dict(row) for row in rows]
 

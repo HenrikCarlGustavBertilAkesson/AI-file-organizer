@@ -1,6 +1,12 @@
 import hashlib
+import os
+import stat
 from pathlib import Path
 from models import File
+
+
+class ScanError(OSError):
+    """A scan could not finish; its results must not be used."""
 
 
 def calculate_hash(path: Path) -> str:
@@ -43,11 +49,23 @@ def scan_directory(directory: str):
 
     files = []
 
-    for path in root.rglob("*"):
-        if path.is_file():
+    def traversal_error(error: OSError) -> None:
+        raise ScanError(
+            f"Could not scan directory {error.filename}: {error}"
+        ) from error
+
+    # Unlike rglob, walk exposes directory traversal failures via onerror.
+    for directory_path, _, filenames in os.walk(
+        root, onerror=traversal_error, followlinks=False
+    ):
+        for filename in filenames:
+            path = Path(directory_path) / filename
             try:
-                files.append(scan_file(str(path)))
-            except OSError as error:
-                print(f"Could not scan {path}: {error}")
+                # stat raises on inaccessible/disappearing files instead of
+                # treating them as absent. Ignore non-regular filesystem entries.
+                if stat.S_ISREG(path.stat().st_mode):
+                    files.append(scan_file(str(path)))
+            except (OSError, ValueError) as error:
+                raise ScanError(f"Could not scan file {path}: {error}") from error
 
     return files

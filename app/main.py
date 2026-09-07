@@ -32,7 +32,7 @@ def main():
         {request}
         """
 
-    result = run_agent(agent_request)
+    result = run_agent(agent_request, allowed_root=allowed_root)
 
     print("\n--- AGENT RESULT ---\n")
     print(result.message)

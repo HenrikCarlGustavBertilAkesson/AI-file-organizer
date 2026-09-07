@@ -68,6 +68,10 @@ def classify_path(path: str) -> dict:
     file = scan_file(path)
 
     processed_file = process_file(file)
+    if isinstance(processed_file, dict):
+        return {key: processed_file[key] for key in (
+            "path", "category", "subcategory", "description", "confidence", "status"
+        )}
 
     return {
         "path": processed_file.path,

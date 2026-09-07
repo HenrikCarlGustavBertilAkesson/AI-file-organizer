@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+from pathlib import Path
 
 from openai import OpenAI
 from dataclasses import asdict, is_dataclass
@@ -150,7 +153,21 @@ Important rules:
 10. All moves require explicit user approval.
 """
 
-def call_tool(name: str, arguments: dict):
+def call_tool(name: str, arguments: dict, allowed_root: str | None = None):
+    if allowed_root:
+        root = Path(allowed_root).resolve()
+        for key in ("path", "directory", "source", "destination"):
+            if key in arguments:
+                path = Path(arguments[key]).expanduser().resolve()
+                if not path.is_relative_to(root):
+                    raise ValueError(f"{key} is outside the selected folder")
+                arguments[key] = str(path)
+        if name == "get_indexed_files":
+            return [row for row in get_indexed_files()
+                    if Path(row["path"]).resolve().is_relative_to(root)]
+        if name == "list_files":
+            return [row for row in list_files(**arguments)
+                    if Path(row["path"]).resolve().is_relative_to(root)]
     if name == "list_files":
         return list_files(**arguments)
 
@@ -168,7 +185,7 @@ def call_tool(name: str, arguments: dict):
 
     raise ValueError(f"Unknown tool: {name}")
 
-def run_agent(user_request: str) -> str:
+def run_agent(user_request: str, allowed_root: str | None = None) -> AgentResult:
     input_messages = [
         {
             "role": "system",
@@ -209,6 +226,7 @@ def run_agent(user_request: str) -> str:
             result = call_tool(
                 item.name,
                 arguments,
+                allowed_root,
             )
 
             if isinstance(result, ProposedAction):

@@ -12,6 +12,13 @@ from actions.executor import execute_action
 
 def _process_single_action(action: ProposedAction, allowed_root: str):
     answer = input("\nApprove? [y]es / [n]o / [s]kip: ").lower()
+    review_action(action, allowed_root, answer)
+
+
+def review_action(action: ProposedAction, allowed_root: str, answer: str):
+    """Shared CLI/browser decision path; execution still revalidates approval."""
+    if action.status != ActionStatus.PENDING:
+        raise ValueError("This proposal has already been reviewed.")
 
     if answer == "y":
         action.status = ActionStatus.APPROVED

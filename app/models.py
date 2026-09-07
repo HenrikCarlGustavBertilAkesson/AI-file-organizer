@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
@@ -48,3 +48,15 @@ class ProposedAction:
 class AgentResult:
     message: str
     proposed_actions: list[ProposedAction]
+
+@dataclass
+class DetectedMove:
+    old_path: str
+    new_path: str
+
+@dataclass
+class ReconciliationResult:
+    new_paths: list[str]
+    missing_paths: list[str]
+    probable_moves: list[DetectedMove] = field(default_factory=list)
+    modified_paths: list[str] = field(default_factory=list)
