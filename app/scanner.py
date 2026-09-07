@@ -38,7 +38,7 @@ def scan_file(path: str) -> File:
         hash=calculate_hash(file_path),
     )
 
-def scan_directory(directory: str, *, scope=None):
+def scan_directory(directory: str, *, scope=None, progress=None):
     root = Path(directory).expanduser().resolve()
 
     if not root.exists():
@@ -58,6 +58,8 @@ def scan_directory(directory: str, *, scope=None):
     for directory_path, directories, filenames in os.walk(
         root, onerror=traversal_error, followlinks=False
     ):
+        if progress:
+            progress(len(files), message=f'Scanning {directory_path}')
         if scope:
             directories[:] = [name for name in directories
                               if scope.allows(Path(directory_path) / name, directory=True)]
@@ -65,6 +67,8 @@ def scan_directory(directory: str, *, scope=None):
             path = Path(directory_path) / filename
             if scope and not scope.allows(path):
                 continue
+            if progress:
+                progress(len(files), message=f'Reading {path}')
             try:
                 # stat raises on inaccessible/disappearing files instead of
                 # treating them as absent. Ignore non-regular filesystem entries.
@@ -73,4 +77,6 @@ def scan_directory(directory: str, *, scope=None):
             except (OSError, ValueError) as error:
                 raise ScanError(f"Could not scan file {path}: {error}") from error
 
+    if progress:
+        progress(len(files), len(files), 'Scan complete', force=True)
     return files

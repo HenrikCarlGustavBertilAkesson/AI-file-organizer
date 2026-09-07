@@ -154,7 +154,7 @@ Important rules:
 10. All moves require explicit user approval.
 """
 
-def call_tool(name: str, arguments: dict, allowed_root: str | None = None):
+def call_tool(name: str, arguments: dict, allowed_root: str | None = None, progress=None):
     if allowed_root:
         root = Path(allowed_root).resolve()
         scope = load_scope(root)
@@ -171,7 +171,7 @@ def call_tool(name: str, arguments: dict, allowed_root: str | None = None):
                     if Path(row["path"]).resolve().is_relative_to(root)
                     and (scope is None or scope.allows(row["path"]))]
         if name == "list_files":
-            return [row for row in list_files(**arguments, scope=scope)
+            return [row for row in list_files(**arguments, scope=scope, progress=progress)
                     if Path(row["path"]).resolve().is_relative_to(root)]
     if name == "list_files":
         return list_files(**arguments)
@@ -190,7 +190,8 @@ def call_tool(name: str, arguments: dict, allowed_root: str | None = None):
 
     raise ValueError(f"Unknown tool: {name}")
 
-def run_agent(user_request: str, allowed_root: str | None = None) -> AgentResult:
+def run_agent(user_request: str, allowed_root: str | None = None, *, progress=None,
+              proposal_callback=None) -> AgentResult:
     if allowed_root:
         scope = load_scope(allowed_root)
         if scope:
@@ -208,7 +209,9 @@ def run_agent(user_request: str, allowed_root: str | None = None) -> AgentResult
 
     proposals = []
 
-    for _ in range(MAX_AGENT_STEPS):
+    for step in range(MAX_AGENT_STEPS):
+        if progress:
+            progress(step, MAX_AGENT_STEPS, 'Requesting AI suggestions (rounds, not files)…', force=True)
         response = client.responses.create(
             model="gpt-5.6-sol",
             tools=TOOLS,
@@ -224,6 +227,8 @@ def run_agent(user_request: str, allowed_root: str | None = None) -> AgentResult
                 continue
 
             tool_called = True
+            if progress:
+                progress(step, MAX_AGENT_STEPS, f'Agent tool: {item.name}', force=True)
 
             arguments = json.loads(item.arguments)
 
@@ -236,10 +241,13 @@ def run_agent(user_request: str, allowed_root: str | None = None) -> AgentResult
                 item.name,
                 arguments,
                 allowed_root,
+                progress,
             )
 
             if isinstance(result, ProposedAction):
                 proposals.append(result)
+                if proposal_callback:
+                    proposal_callback(result)
 
             if is_dataclass(result):
                 result_for_ai = asdict(result)

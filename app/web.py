@@ -1,8 +1,6 @@
 """Local browser interface. Run with python3 app/web.py."""
-from contextlib import redirect_stdout
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from io import StringIO
 from pathlib import Path
 import json
 import secrets
@@ -14,6 +12,7 @@ from search import search_files
 from review import review_action
 from actions.validator import validate_action
 from workspace import inventory, load_scope, save_scope
+from jobs import JobManager, OPERATIONS, get_job, recent_jobs
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -46,11 +45,11 @@ def snapshot(root):
     return {'root': str(root), 'files': files, 'actions': actions}
 
 
-def dispatch(operation, data):
+def dispatch(operation, data, *, progress=None):
     root = selected_root(data.get('root'))
     if operation == 'inventory':
         scope = load_scope(root)
-        return {'root': str(root), 'inventory': inventory(root, scope.exclusions if scope else None),
+        return {'root': str(root), 'inventory': inventory(root, scope.exclusions if scope else None, progress=progress),
                 'message': 'Select what to organize. Counts exclude the locations listed below.'}
     if operation == 'save-scope':
         save_scope(root, data.get('folders'), data.get('loose_files'), data.get('exclusions'))
@@ -61,12 +60,12 @@ def dispatch(operation, data):
     if operation == 'state':
         pass
     elif operation in ('scan', 'apply'):
-        result = reconcile_directory(str(root), apply=operation == 'apply')
+        result = reconcile_directory(str(root), apply=operation == 'apply', progress=progress)
         extra['report'] = asdict(result)
         message = ('Index updated. Your files have not been moved.' if operation == 'apply'
                    else 'Scan complete. Review the changes below.')
     elif operation == 'classify':
-        result = process_pending(str(root), retry_failed=data.get('retry') is True)
+        result = process_pending(str(root), retry_failed=data.get('retry') is True, progress=progress)
         message = (f'{result.classified} classified · {result.unsupported} unsupported · '
                    f'{result.empty} empty · {result.failed} failed · {result.skipped} skipped')
     elif operation == 'search':
@@ -77,7 +76,11 @@ def dispatch(operation, data):
         if not request:
             raise ValueError('Describe how you would like your files organized.')
         from agents.organizer import run_agent
-        result = run_agent(f'Allowed folder: {root}\nUser request: {request}', allowed_root=str(root))
+        def persist_proposal(action):
+            if inside(action.source, root, scope) and inside(action.destination, root, scope):
+                database.save_action(action)
+        result = run_agent(f'Allowed folder: {root}\nUser request: {request}', allowed_root=str(root),
+                           progress=progress, proposal_callback=persist_proposal)
         for action in result.proposed_actions:
             if inside(action.source, root, scope) and inside(action.destination, root, scope):
                 database.save_action(action)
@@ -140,9 +143,25 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(size))
             if not isinstance(data, dict) or not self.path.startswith('/api/'):
                 raise ValueError('Invalid request.')
-            with redirect_stdout(StringIO()) as output:
-                result = dispatch(self.path.removeprefix('/api/'), data)
-            result['details'] = output.getvalue()
+            operation = self.path.removeprefix('/api/')
+            if operation in OPERATIONS:
+                data['root'] = str(selected_root(data.get('root')))
+                result = {'job': self.server.jobs.submit(operation, data)}
+            elif operation == 'jobs':
+                result = {'jobs': recent_jobs(str(selected_root(data.get('root'))))}
+            elif operation in ('job', 'cancel-job', 'resume-job'):
+                job = get_job(data.get('id'))
+                if job['root'] != str(selected_root(data.get('root'))):
+                    raise ValueError('Job belongs to another workspace.')
+                if operation == 'cancel-job':
+                    job = self.server.jobs.cancel(job['id'])
+                elif operation == 'resume-job':
+                    job = self.server.jobs.resume(job['id'])
+                result = {'job': job}
+            else:
+                if operation in ('save-scope', 'review') and self.server.jobs.busy():
+                    raise ValueError('Wait for the active job to finish before changing scope or reviewing moves.')
+                result = dispatch(operation, data)
             self.send(200, json.dumps(result).encode(), 'application/json')
         except Exception as error:
             self.send(400, json.dumps({'error': str(error)}).encode(), 'application/json')
@@ -155,12 +174,15 @@ def main():
     args = parser.parse_args()
     database.create_database()
     with HTTPServer(('127.0.0.1', args.port), Handler) as server:
+        server.jobs = JobManager(dispatch)
         server.token = secrets.token_urlsafe(32)
         print(f'Open http://127.0.0.1:{server.server_port} in your browser. Ctrl+C to stop.', flush=True)
         try:
             server.serve_forever()
         except KeyboardInterrupt:
             pass
+        finally:
+            server.jobs.close()
 
 
 if __name__ == '__main__':

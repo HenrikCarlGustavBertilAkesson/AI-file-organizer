@@ -89,7 +89,20 @@ def _workspace_scopes(connection: sqlite3.Connection) -> None:
     )''')
 
 
-MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index, _workspace_scopes)
+def _background_jobs(connection: sqlite3.Connection) -> None:
+    connection.execute('''CREATE TABLE jobs (
+        id INTEGER PRIMARY KEY, operation TEXT NOT NULL, root TEXT NOT NULL,
+        parameters TEXT NOT NULL, status TEXT NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0, total INTEGER,
+        failures INTEGER NOT NULL DEFAULT 0, message TEXT NOT NULL DEFAULT '',
+        result TEXT, parent_id INTEGER,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+
+MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index, _workspace_scopes,
+              _background_jobs)
 
 
 def migrate(connection: sqlite3.Connection) -> None:

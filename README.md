@@ -217,7 +217,7 @@ dependencies. It opens without an API key for scanning, indexing, and search.
 
 The dashboard listens only on localhost. Keep the terminal running; stop with
 Ctrl+C. Use `python3 app/web.py --port 8766` if the default port is occupied.
-Operations run one at a time and show a waiting indicator. This first version
+Long operations run as background jobs with saved progress. This first version
 accepts a pasted folder path rather than a native folder picker.
 
 Create and activate a virtual environment, install the dependencies, and make sure an OpenAI API key is available in the environment.
@@ -235,6 +235,38 @@ python3 app/main.py
 Do not hardcode API keys or commit them to Git.
 
 ## Development Status
+
+### Background jobs and progress
+
+Inventory, scanning, index repair, classification, and organization suggestions
+run in a background worker. The dashboard remains available for viewing and
+searching while a job runs. Only one background job runs at a time; changing
+workspace scope and approving moves are blocked until it finishes.
+
+The job card shows completed work, a total where known, failures, and current
+activity. Inventory and scanning discover their totals as they run. Agent
+progress reports rounds or its current tool, not an estimate of files organized.
+Recent job status and results persist in SQLite through migration 5. Reloading
+the browser reconnects to the most recent job for the saved folder.
+
+Use **Cancel after current file** to stop at a safe boundary. An in-flight hash,
+extraction, or AI request must finish before cancellation takes effect. Index
+repair is atomic: cancellation is checked before its transaction, and a repair
+already committing is allowed to finish. A cancelled scan never applies partial
+results.
+
+After server restart, unfinished jobs are marked interrupted. **Resume / restart**
+creates a new job linked to the old one, using the current saved workspace scope:
+
+- Classification continues with remaining pending files; successful results are
+  already saved. The original retry-failed option is retained.
+- Inventory and scans restart rather than reusing a potentially stale snapshot.
+- Organization restarts its reasoning; proposals already generated are saved as
+  pending and still require approval. AI conversation state is not resumed.
+
+Run a single dashboard server for a database. Stopping the server requests
+cooperative cancellation and waits for the current work to reach a safe boundary.
+The CLI commands remain synchronous.
 
 ### Workspace scope and inventory
 
@@ -265,8 +297,7 @@ its scope. Excluded indexed records remain stored and are not marked missing.
 Move sources and destinations must both be in scope. Selecting only loose
 files does not authorize moves into unselected subfolders; select the intended
 destination folder as well. This first version selects top-level folders,
-runs inventory synchronously, and does not yet implement background jobs or
-incremental hashing from the scaling roadmap.
+does not yet implement incremental hashing from the scaling roadmap.
 
 ### Keyword search
 

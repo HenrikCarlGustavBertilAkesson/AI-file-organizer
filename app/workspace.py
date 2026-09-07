@@ -87,7 +87,7 @@ def save_scope(root, folders, loose_files, exclusions):
     return scope
 
 
-def inventory(directory, exclusions=None):
+def inventory(directory, exclusions=None, *, progress=None):
     root = Path(directory).expanduser().resolve()
     if not root.is_dir():
         raise ValueError('Choose an existing folder.')
@@ -96,6 +96,8 @@ def inventory(directory, exclusions=None):
     errors, skipped = [], []
 
     def visit(path, group=None):
+        if progress:
+            progress(sum(item['files'] for item in groups.values()), message=f'Inspecting {path}')
         try:
             with os.scandir(path) as iterator:
                 entries = list(iterator)
@@ -106,6 +108,8 @@ def inventory(directory, exclusions=None):
         if project:
             groups[group or '.']['project'] = True
         for entry in entries:
+            if progress:
+                progress(sum(item['files'] for item in groups.values()), message=f'Inspecting {entry.path}')
             child = Path(entry.path)
             try:
                 if entry.is_symlink():
@@ -127,6 +131,9 @@ def inventory(directory, exclusions=None):
             except OSError as error:
                 errors.append({'path': str(child), 'error': str(error)})
     visit(root)
+    if progress:
+        count = sum(item['files'] for item in groups.values())
+        progress(count, count, 'Inventory complete', len(errors), force=True)
     saved = load_scope(root)
     return {'root': str(root), 'groups': list(groups.values()), 'errors': errors,
             'skipped': skipped, 'exclusions': exclusions, 'complete': not errors,
