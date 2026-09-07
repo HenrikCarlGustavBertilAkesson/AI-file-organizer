@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from workspace import load_scope
 
 from openai import OpenAI
 from dataclasses import asdict, is_dataclass
@@ -156,17 +157,21 @@ Important rules:
 def call_tool(name: str, arguments: dict, allowed_root: str | None = None):
     if allowed_root:
         root = Path(allowed_root).resolve()
+        scope = load_scope(root)
         for key in ("path", "directory", "source", "destination"):
             if key in arguments:
                 path = Path(arguments[key]).expanduser().resolve()
                 if not path.is_relative_to(root):
                     raise ValueError(f"{key} is outside the selected folder")
+                if scope and not scope.allows(path, directory=key == "directory"):
+                    raise ValueError(f"{key} is outside the saved workspace scope")
                 arguments[key] = str(path)
         if name == "get_indexed_files":
             return [row for row in get_indexed_files()
-                    if Path(row["path"]).resolve().is_relative_to(root)]
+                    if Path(row["path"]).resolve().is_relative_to(root)
+                    and (scope is None or scope.allows(row["path"]))]
         if name == "list_files":
-            return [row for row in list_files(**arguments)
+            return [row for row in list_files(**arguments, scope=scope)
                     if Path(row["path"]).resolve().is_relative_to(root)]
     if name == "list_files":
         return list_files(**arguments)
@@ -186,6 +191,10 @@ def call_tool(name: str, arguments: dict, allowed_root: str | None = None):
     raise ValueError(f"Unknown tool: {name}")
 
 def run_agent(user_request: str, allowed_root: str | None = None) -> AgentResult:
+    if allowed_root:
+        scope = load_scope(allowed_root)
+        if scope:
+            user_request += '\nSaved workspace scope (all tools and destinations must respect it):\n' + json.dumps(asdict(scope))
     input_messages = [
         {
             "role": "system",

@@ -10,7 +10,7 @@ __pycache__/
 *.py[cod]
 
 # Local database
-files.db
+*.db
 
 # macOS
 .DS_Store

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from models import ProposedAction
+from workspace import load_scope
 
 
 def is_inside_directory(path: Path, root: Path) -> bool:
@@ -23,6 +24,9 @@ def validate_action(
 
     source = Path(action.source).resolve()
     destination = Path(action.destination).resolve()
+    scope = load_scope(root)
+    if scope and (not scope.allows(Path(action.source)) or not scope.allows(Path(action.destination))):
+        return False, "Source or destination is outside the saved workspace scope."
 
     if not is_inside_directory(source, root):
         return False, "Source is outside the allowed directory."

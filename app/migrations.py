@@ -83,7 +83,13 @@ def _search_index(connection: sqlite3.Connection) -> None:
     connection.execute("INSERT INTO files_fts(files_fts) VALUES ('rebuild')")
 
 
-MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index)
+def _workspace_scopes(connection: sqlite3.Connection) -> None:
+    connection.execute('''CREATE TABLE workspaces (
+        root TEXT PRIMARY KEY, configuration TEXT NOT NULL
+    )''')
+
+
+MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index, _workspace_scopes)
 
 
 def migrate(connection: sqlite3.Connection) -> None:

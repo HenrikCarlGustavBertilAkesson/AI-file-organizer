@@ -206,8 +206,9 @@ source .venv/bin/activate
 python3 app/web.py
 ```
 
-Open **http://127.0.0.1:8765**. Paste a folder path and choose **Use folder**.
-Start with **Scan for changes**, review the report, then **Update index**.
+Open **http://127.0.0.1:8765**. Paste a folder path and choose **Preview folder**.
+Review the inventory, select the folders you want, and choose **Use this scope**.
+Then choose **Scan for changes**, review the report, and **Update index**.
 Use **Classify pending files** to extract and classify documents, search your
 library, and **Suggest organization** to generate moves for individual approval.
 Classification and organization use the AI API and require your configured key
@@ -234,6 +235,38 @@ python3 app/main.py
 Do not hardcode API keys or commit them to Git.
 
 ## Development Status
+
+### Workspace scope and inventory
+
+The dashboard previews file counts and total bytes for each top-level subfolder
+and for files directly in the root. Inventory reads filesystem metadata only;
+it does not hash files, extract text, or call AI. Counts omit excluded locations
+and are marked incomplete if a location cannot be read.
+
+Default excluded names are `.git`, `.venv`, `venv`, `node_modules`, and
+`__pycache__`. You can edit these names before saving; each name applies at every
+depth. Symbolic links and `.app`, `.bundle`, and `.framework` bundles are always
+skipped within saved workspaces. The inventory lists skipped locations and errors.
+Counts reflect the exclusions used for that preview; preview again after saving
+changed exclusions to refresh them.
+
+Folders containing recognized project markers start unchecked. This is a
+filename-based heuristic, not a guarantee that every project is detected. A
+selected top-level folder includes its descendants except excluded locations.
+If a project is found deeper inside it, the whole top-level group is flagged
+for deliberate inclusion.
+
+Migration 4 stores a reusable scope for each exact normalized root in SQLite.
+Scanning, classification, search, agent tools, and move validation use that saved
+scope, including CLI operations invoked with the same root. Roots without a
+saved scope retain their previous behavior. Preview the root again to change
+its scope. Excluded indexed records remain stored and are not marked missing.
+
+Move sources and destinations must both be in scope. Selecting only loose
+files does not authorize moves into unselected subfolders; select the intended
+destination folder as well. This first version selects top-level folders,
+runs inventory synchronously, and does not yet implement background jobs or
+incremental hashing from the scaling roadmap.
 
 ### Keyword search
 

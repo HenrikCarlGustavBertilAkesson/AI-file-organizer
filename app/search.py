@@ -6,6 +6,7 @@ import re
 import sqlite3
 
 import database
+from workspace import load_scope
 
 
 @dataclass
@@ -28,11 +29,13 @@ def search_files(directory: str, query: str, *, limit: int = 20) -> list[SearchR
         return []
     match = " AND ".join('"' + term + '"' for term in terms)
     uri = Path(database.DATABASE).resolve().as_uri() + "?mode=ro"
+    scope = load_scope(root)
     with closing(sqlite3.connect(uri, uri=True)) as connection:
         def inside_root(path):
             candidate = Path(path)
             return (candidate.is_relative_to(root)
-                    and candidate.resolve().is_relative_to(root))
+                    and candidate.resolve().is_relative_to(root)
+                    and (scope is None or scope.allows(candidate)))
 
         connection.create_function("inside_root", 1, inside_root)
         rows = connection.execute("""

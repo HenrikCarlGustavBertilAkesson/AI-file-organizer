@@ -13,6 +13,7 @@ from process_pending import process_pending
 from search import search_files
 from review import review_action
 from actions.validator import validate_action
+from workspace import inventory, load_scope, save_scope
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -26,17 +27,19 @@ def selected_root(value):
     return root
 
 
-def inside(path, root):
-    return Path(path).is_relative_to(root) and Path(path).resolve().is_relative_to(root)
+def inside(path, root, scope=None):
+    return (Path(path).is_relative_to(root) and Path(path).resolve().is_relative_to(root)
+            and (scope is None or scope.allows(path)))
 
 
 def snapshot(root):
+    scope = load_scope(root)
     files = [{key: row[key] for key in
               ('path', 'filename', 'category', 'description', 'status', 'is_present')}
-             for row in database.get_all_files() if inside(row['path'], root)]
+             for row in database.get_all_files() if inside(row['path'], root, scope)]
     actions = []
     for action in database.get_pending_actions():
-        if inside(action.source, root) and inside(action.destination, root):
+        if inside(action.source, root, scope) and inside(action.destination, root, scope):
             data = asdict(action)
             data['valid'], data['validation_error'] = validate_action(action, str(root))
             actions.append(data)
@@ -45,6 +48,14 @@ def snapshot(root):
 
 def dispatch(operation, data):
     root = selected_root(data.get('root'))
+    if operation == 'inventory':
+        scope = load_scope(root)
+        return {'root': str(root), 'inventory': inventory(root, scope.exclusions if scope else None),
+                'message': 'Select what to organize. Counts exclude the locations listed below.'}
+    if operation == 'save-scope':
+        save_scope(root, data.get('folders'), data.get('loose_files'), data.get('exclusions'))
+        return {**snapshot(root), 'message': 'Workspace scope saved. Scan to check the selected files.'}
+    scope = load_scope(root)
     message = ''
     extra = {}
     if operation == 'state':
@@ -68,7 +79,7 @@ def dispatch(operation, data):
         from agents.organizer import run_agent
         result = run_agent(f'Allowed folder: {root}\nUser request: {request}', allowed_root=str(root))
         for action in result.proposed_actions:
-            if inside(action.source, root) and inside(action.destination, root):
+            if inside(action.source, root, scope) and inside(action.destination, root, scope):
                 database.save_action(action)
         message = result.message
     elif operation == 'review':
@@ -77,7 +88,7 @@ def dispatch(operation, data):
             raise ValueError('Choose approve or reject.')
         action = next((action for action in database.get_pending_actions()
                        if action.id == data.get('id')), None)
-        if not action or not inside(action.source, root) or not inside(action.destination, root):
+        if not action or not inside(action.source, root, scope) or not inside(action.destination, root, scope):
             raise ValueError('This proposal is no longer available in the selected folder.')
         review_action(action, str(root), answer)
         message = f'Proposal {action.status}.'

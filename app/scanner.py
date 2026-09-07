@@ -38,7 +38,7 @@ def scan_file(path: str) -> File:
         hash=calculate_hash(file_path),
     )
 
-def scan_directory(directory: str):
+def scan_directory(directory: str, *, scope=None):
     root = Path(directory).expanduser().resolve()
 
     if not root.exists():
@@ -55,11 +55,16 @@ def scan_directory(directory: str):
         ) from error
 
     # Unlike rglob, walk exposes directory traversal failures via onerror.
-    for directory_path, _, filenames in os.walk(
+    for directory_path, directories, filenames in os.walk(
         root, onerror=traversal_error, followlinks=False
     ):
+        if scope:
+            directories[:] = [name for name in directories
+                              if scope.allows(Path(directory_path) / name, directory=True)]
         for filename in filenames:
             path = Path(directory_path) / filename
+            if scope and not scope.allows(path):
+                continue
             try:
                 # stat raises on inaccessible/disappearing files instead of
                 # treating them as absent. Ignore non-regular filesystem entries.

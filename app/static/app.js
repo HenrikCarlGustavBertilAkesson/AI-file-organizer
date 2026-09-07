@@ -12,7 +12,7 @@ async function request(operation, data={}, label='Working…') {
     const result=await response.json(); if(!response.ok) throw new Error(result.error||'The operation failed.');
     root=result.root; state=result; $('root').value=root; localStorage.setItem('organizer-folder',root); $('workspace').hidden=false;
     $('logs').textContent=result.details||''; $('details').hidden=!result.details;
-    render(result); notice(result.message||'Your workspace is up to date.'); return result;
+    if(result.inventory){renderInventory(result.inventory);$('workspace').hidden=true;}else{render(result);} notice(result.message||'Your workspace is up to date.'); return result;
   } catch(error) {notice(error.message,'error'); return null;} finally {clearInterval(timer); controls.forEach((node,i)=>node.disabled=disabled[i]);}
 }
 function render(data) {
@@ -40,9 +40,31 @@ function renderReport(report){const box=$('report');box.hidden=false;box.replace
   if(!count)box.append(el('p','No changes detected.'));
   else {const apply=el('button','Update index','secondary');apply.onclick=async()=>{const result=await request('apply',{},'Updating your index…');if(result){box.replaceChildren(el('p','Index updated. Classify pending files to make their contents searchable.'));}};box.append(apply,el('p','Updates the local index only. Does not move or delete files.','hint'));}
 }
-$('folder-form').onsubmit=async event=>{event.preventDefault();const result=await request('state',{root:$('root').value},'Opening folder…');if(result){$('report').hidden=true;$('query').value='';}};
+$('folder-form').onsubmit=async event=>{event.preventDefault();const result=await request('inventory',{root:$('root').value},'Opening folder…');if(result){$('report').hidden=true;$('query').value='';}};
 $('scan').onclick=()=>request('scan',{},'Scanning your folder…');
 $('classify').onclick=()=>request('classify',{retry:$('retry').checked},'Classifying files with AI…');
 $('search-form').onsubmit=event=>{event.preventDefault();request('search',{query:$('query').value},'Searching…');};
 $('clear').onclick=()=>{$('query').value='';if(state)renderFiles(state.files.filter(file=>file.is_present));};
 $('organize-form').onsubmit=async event=>{event.preventDefault();const result=await request('organize',{request:$('request').value},'Preparing organization suggestions with AI…');if(result)$('review').scrollIntoView({behavior:'smooth'});};
+
+function renderInventory(data){
+  $('scope-card').hidden=false; $('scope-groups').replaceChildren();
+  const total=data.groups.reduce((sum,group)=>sum+group.files,0);
+  const bytes=data.groups.reduce((sum,group)=>sum+group.bytes,0);
+  $('inventory-summary').textContent=`${total} eligible files · ${(bytes/1048576).toFixed(1)} MB${data.complete?'':' · Incomplete: some locations could not be read'}`;
+  data.groups.forEach(group=>{
+    const label=el('label',undefined,'check'); const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.value=group.name;
+    checkbox.checked=data.scope?(group.name==='.'?data.scope.loose_files:data.scope.folders.includes(group.name)):!group.project;
+    label.append(checkbox,document.createTextNode(` ${group.name==='.'?'Files directly in this folder':group.name} — ${group.files} files · ${(group.bytes/1048576).toFixed(1)} MB${group.project?' · Project detected: review before including':''}`));
+    $('scope-groups').append(label);
+  });
+  $('exclusions').value=data.exclusions.join(', ');$('inventory-details').replaceChildren();
+  data.skipped.forEach(item=>$('inventory-details').append(el('p',item.path+' — '+item.reason,'path')));
+  data.errors.forEach(item=>$('inventory-details').append(el('p',item.path+' — '+item.error,'path')));
+  if(!data.skipped.length&&!data.errors.length)$('inventory-details').append(el('p','No excluded locations or errors.'));
+}
+$('save-scope').onclick=async()=>{
+  const selected=[...$('scope-groups').querySelectorAll('input:checked')].map(input=>input.value);
+  const result=await request('save-scope',{folders:selected.filter(name=>name!=='.'),loose_files:selected.includes('.'),exclusions:$('exclusions').value.split(',').map(name=>name.trim()).filter(Boolean)},'Saving workspace scope…');
+  if(result){$('scope-card').hidden=true;$('report').hidden=true;}
+};

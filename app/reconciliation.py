@@ -6,13 +6,15 @@ import sqlite3
 from database import create_database, get_all_files, get_connection, save_file
 from models import DetectedMove, ReconciliationResult
 from scanner import scan_directory
+from workspace import load_scope
 
 
 def reconcile_directory(allowed_root: str, *, apply: bool = False) -> ReconciliationResult:
     root = Path(allowed_root).expanduser().resolve()
-    scanned_files = scan_directory(str(root))
+    scope = load_scope(root)
+    scanned_files = scan_directory(str(root), scope=scope) if scope else scan_directory(str(root))
     if not apply:
-        return compare_files(root, scanned_files, get_all_files())
+        return compare_files(root, scanned_files, get_all_files(), scope=scope)
 
     # Read and repair the index under one write transaction. Scanning must
     # finish successfully before we acquire the lock or change any records.
@@ -20,7 +22,7 @@ def reconcile_directory(allowed_root: str, *, apply: bool = False) -> Reconcilia
         with connection:
             connection.execute("BEGIN IMMEDIATE")
             indexed_files = get_all_files(connection)
-            result = compare_files(root, scanned_files, indexed_files)
+            result = compare_files(root, scanned_files, indexed_files, scope=scope)
             scanned_by_path = {file.path: file for file in scanned_files}
             indexed_by_path = {row["path"]: row for row in indexed_files}
             for move in result.probable_moves:
@@ -60,12 +62,13 @@ def reconcile_directory(allowed_root: str, *, apply: bool = False) -> Reconcilia
     return result
 
 
-def compare_files(root, scanned_files, indexed_files) -> ReconciliationResult:
+def compare_files(root, scanned_files, indexed_files, *, scope=None) -> ReconciliationResult:
 
     scanned_by_path = {
         file.path: file
         for file in scanned_files
         if Path(file.path).is_relative_to(root)
+        and (scope is None or scope.allows(file.path))
     }
 
     indexed_by_path = {
@@ -73,6 +76,7 @@ def compare_files(root, scanned_files, indexed_files) -> ReconciliationResult:
         for row in indexed_files
         if Path(row["path"]).is_relative_to(root)
         and row["is_present"]
+        and (scope is None or scope.allows(row["path"]))
     }
 
     new_paths = scanned_by_path.keys() - indexed_by_path.keys()

@@ -6,6 +6,7 @@ import sqlite3
 
 from database import create_database, get_all_files, get_connection
 from scanner import scan_file
+from workspace import load_scope
 
 
 @dataclass
@@ -29,10 +30,11 @@ def process_pending(directory: str, *, retry_failed: bool = False) -> Processing
         raise ValueError(f"Not a directory: {root}")
     statuses = {"pending", "failed"} if retry_failed else {"pending"}
     summary = ProcessingSummary()
+    scope = load_scope(root)
     for row in get_all_files():
         path = Path(row["path"])
         if (not row["is_present"] or row["status"] not in statuses
-                or not path.is_relative_to(root)):
+                or not path.is_relative_to(root) or (scope and not scope.allows(path))):
             continue
         try:
             # Resolve again: an indexed path may now be a symlink outside root.
