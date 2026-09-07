@@ -8,11 +8,13 @@ import secrets
 import database
 from reconciliation import reconcile_directory
 from process_pending import process_pending
-from search import search_files
 from review import review_action
 from actions.validator import validate_action
 from workspace import inventory, load_scope, save_scope
 from jobs import JobManager, OPERATIONS, get_job, recent_jobs
+from library import library_page
+from models import ProposedAction
+from contextlib import closing
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -31,18 +33,14 @@ def inside(path, root, scope=None):
             and (scope is None or scope.allows(path)))
 
 
-def snapshot(root):
-    scope = load_scope(root)
-    files = [{key: row[key] for key in
-              ('path', 'filename', 'category', 'description', 'status', 'is_present')}
-             for row in database.get_all_files() if inside(row['path'], root, scope)]
-    actions = []
-    for action in database.get_pending_actions():
-        if inside(action.source, root, scope) and inside(action.destination, root, scope):
-            data = asdict(action)
-            data['valid'], data['validation_error'] = validate_action(action, str(root))
-            actions.append(data)
-    return {'root': str(root), 'files': files, 'actions': actions}
+def snapshot(root, options=None):
+    options = options or {}
+    result = library_page(root, **{key: options[key] for key in
+        ('page', 'page_size', 'status', 'category', 'query', 'action_page') if key in options})
+    for data in result['actions']:
+        action = ProposedAction(**data)
+        data['valid'], data['validation_error'] = validate_action(action, str(root))
+    return {'root': str(root), **result}
 
 
 def dispatch(operation, data, *, progress=None):
@@ -53,7 +51,7 @@ def dispatch(operation, data, *, progress=None):
                 'message': 'Select what to organize. Counts exclude the locations listed below.'}
     if operation == 'save-scope':
         save_scope(root, data.get('folders'), data.get('loose_files'), data.get('exclusions'))
-        return {**snapshot(root), 'message': 'Workspace scope saved. Scan to check the selected files.'}
+        return {**snapshot(root, data), 'message': 'Workspace scope saved. Scan to check the selected files.'}
     scope = load_scope(root)
     message = ''
     extra = {}
@@ -69,8 +67,8 @@ def dispatch(operation, data, *, progress=None):
         message = (f'{result.classified} classified · {result.unsupported} unsupported · '
                    f'{result.empty} empty · {result.failed} failed · {result.skipped} skipped')
     elif operation == 'search':
-        extra['results'] = [asdict(result) for result in
-                            search_files(str(root), str(data.get('query', '')))]
+        result = snapshot(root, data)
+        return {**result, 'results': result['files'], 'message': 'Search complete.'}
     elif operation == 'organize':
         request = str(data.get('request', '')).strip()
         if not request:
@@ -89,8 +87,11 @@ def dispatch(operation, data, *, progress=None):
         answer = data.get('decision')
         if answer not in ('y', 'n'):
             raise ValueError('Choose approve or reject.')
-        action = next((action for action in database.get_pending_actions()
-                       if action.id == data.get('id')), None)
+        with closing(database.get_connection()) as connection:
+            connection.row_factory = database.sqlite3.Row
+            row = connection.execute('''SELECT id,action_type,source,destination,reason,status,error
+                FROM actions WHERE id=? AND status='pending' ''', (data.get('id'),)).fetchone()
+        action = ProposedAction(**dict(row)) if row else None
         if not action or not inside(action.source, root, scope) or not inside(action.destination, root, scope):
             raise ValueError('This proposal is no longer available in the selected folder.')
         review_action(action, str(root), answer)
@@ -99,7 +100,7 @@ def dispatch(operation, data, *, progress=None):
             message += f' {action.error}'
     else:
         raise ValueError('Unknown operation.')
-    return {**snapshot(root), **extra, 'message': message}
+    return {**snapshot(root, data), **extra, 'message': message}
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -236,6 +236,25 @@ Do not hardcode API keys or commit them to Git.
 
 ## Development Status
 
+### Paginated library and filters
+
+The dashboard loads 50 files per page by default, with choices of 25 or 100.
+Use **Previous** and **Next** to navigate. Status and category filters combine
+with keyword search, and the count reflects all matching records, not just the
+current page. **Show all** clears these filters. Missing records are available
+through the status filter; the default view includes present files only.
+
+Search results are ranked and paginated. Ordinary listings use stable path
+ordering. Pending proposals are shown 20 per page with independent navigation.
+Dashboard totals are calculated in SQLite. File rows omit extracted contents
+and hashes, and descriptions are limited to 400 characters in the listing.
+Reconciliation and processing request only their needed metadata columns.
+Migration 6 adds indexes for library filtering and pending-action queries.
+
+Counts still evaluate the saved scope across matching records. This change
+bounds returned rows and browser rendering; it is not a completed large-folder
+benchmark or the bounded AI workflow scheduled for Step 4.
+
 ### Background jobs and progress
 
 Inventory, scanning, index repair, classification, and organization suggestions

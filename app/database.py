@@ -101,15 +101,19 @@ def get_file_by_path(path: str):
 
     return dict(result)
 
-def get_all_files(connection=None):
+def get_all_files(connection=None, *, columns=None):
+    allowed = set(File.__dataclass_fields__) | {'id'}
+    if columns is not None and (not columns or not set(columns) <= allowed):
+        raise ValueError('Unknown file columns')
+    projection = ', '.join(columns) if columns else '*'
     owns_connection = connection is None
     if owns_connection:
         connection = get_connection()
 
     connection.row_factory = sqlite3.Row
 
-    rows = connection.execute("""
-        SELECT *
+    rows = connection.execute(f"""
+        SELECT {projection}
         FROM files
     """).fetchall()
 

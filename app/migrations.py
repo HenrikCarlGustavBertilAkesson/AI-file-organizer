@@ -101,8 +101,14 @@ def _background_jobs(connection: sqlite3.Connection) -> None:
     )''')
 
 
+def _library_indexes(connection: sqlite3.Connection) -> None:
+    connection.execute('CREATE INDEX files_presence_status_path ON files(is_present,status,path)')
+    connection.execute('CREATE INDEX files_presence_category_path ON files(is_present,category,path)')
+    connection.execute('CREATE INDEX actions_status_id ON actions(status,id)')
+
+
 MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index, _workspace_scopes,
-              _background_jobs)
+              _background_jobs, _library_indexes)
 
 
 def migrate(connection: sqlite3.Connection) -> None:

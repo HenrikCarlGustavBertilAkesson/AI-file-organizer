@@ -30,7 +30,9 @@ workflow rather than replacing those tests.
 - Step 1: complete — inventory and saved scope selection.
 - Step 2: complete — background worker, persisted job status/results, progress,
   cooperative cancellation, restart recovery, and resumable processing.
-- Steps 3–7: remaining. Next is paginated library and database queries.
+- Step 3: complete — paginated library/search results, status/category filters,
+  scoped SQL counts, bounded proposal pages, and metadata-only projections.
+- Steps 4–7: remaining. Next is bounded AI processing.
 
 Step 2 uses one background worker and keeps long operations out of HTTP request
 handling. Completed classifications and generated proposals are persisted.
