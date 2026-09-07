@@ -9,15 +9,18 @@ from scanner import scan_directory
 from workspace import load_scope
 
 
-def reconcile_directory(allowed_root: str, *, apply: bool = False) -> ReconciliationResult:
+def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None) -> ReconciliationResult:
     root = Path(allowed_root).expanduser().resolve()
     scope = load_scope(root)
-    scanned_files = scan_directory(str(root), scope=scope) if scope else scan_directory(str(root))
+    scanned_files = (scan_directory(str(root), scope=scope, progress=progress)
+                     if scope or progress else scan_directory(str(root)))
     if not apply:
         return compare_files(root, scanned_files, get_all_files(), scope=scope)
 
     # Read and repair the index under one write transaction. Scanning must
     # finish successfully before we acquire the lock or change any records.
+    if progress:
+        progress(message='Applying index repairs atomically…', force=True)
     with closing(get_connection()) as connection:
         with connection:
             connection.execute("BEGIN IMMEDIATE")

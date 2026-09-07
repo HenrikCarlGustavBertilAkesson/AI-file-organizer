@@ -10,8 +10,8 @@ from processor import process_file
 
 MAX_TOOL_CONTENT_LENGTH = 20_000
 
-def list_files(directory: str, *, scope=None) -> list[dict]:
-    files = scan_directory(directory, scope=scope)
+def list_files(directory: str, *, scope=None, progress=None) -> list[dict]:
+    files = scan_directory(directory, scope=scope, progress=progress)
 
     return [
         {

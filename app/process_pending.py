@@ -24,14 +24,20 @@ def process_file(file):
     return process(file)
 
 
-def process_pending(directory: str, *, retry_failed: bool = False) -> ProcessingSummary:
+def process_pending(directory: str, *, retry_failed: bool = False, progress=None) -> ProcessingSummary:
     root = Path(directory).expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Not a directory: {root}")
     statuses = {"pending", "failed"} if retry_failed else {"pending"}
     summary = ProcessingSummary()
     scope = load_scope(root)
-    for row in get_all_files():
+    candidates = [row for row in get_all_files()
+                  if row['is_present'] and row['status'] in statuses
+                  and Path(row['path']).is_relative_to(root)
+                  and (scope is None or scope.allows(row['path']))]
+    for index, row in enumerate(candidates):
+        if progress:
+            progress(index, len(candidates), f"Processing {row['path']}", summary.failed, force=True)
         path = Path(row["path"])
         if (not row["is_present"] or row["status"] not in statuses
                 or not path.is_relative_to(root) or (scope and not scope.allows(path))):
@@ -61,6 +67,8 @@ def process_pending(directory: str, *, retry_failed: bool = False) -> Processing
                 )
             summary.failed += 1
             print(f"Failed: {path}: {error}")
+    if progress:
+        progress(len(candidates), len(candidates), 'Processing complete', summary.failed, force=True)
     return summary
 
 

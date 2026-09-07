@@ -4,17 +4,58 @@ const token = document.querySelector('meta[name="app-token"]').content;
 $('root').value = localStorage.getItem('organizer-folder') || '';
 function el(tag, text, className) {const node = document.createElement(tag); if(text !== undefined) node.textContent = text; if(className) node.className = className; return node;}
 function notice(text, kind='') {$('notice').textContent=text; $('notice').className=kind;}
-async function request(operation, data={}, label='Working…') {
-  const controls=[...document.querySelectorAll('button, input, textarea')]; const disabled=controls.map(node=>node.disabled);
-  controls.forEach(node=>node.disabled=true); notice(label, 'busy');
-  const started=Date.now(); const timer=setInterval(()=>notice(`${label} ${Math.floor((Date.now()-started)/1000)}s elapsed.`, 'busy'),1000);
-  try {const response=await fetch('/api/'+operation,{method:'POST',headers:{'Content-Type':'application/json','X-App-Token':token},body:JSON.stringify({root,...data})});
-    const result=await response.json(); if(!response.ok) throw new Error(result.error||'The operation failed.');
-    root=result.root; state=result; $('root').value=root; localStorage.setItem('organizer-folder',root); $('workspace').hidden=false;
-    $('logs').textContent=result.details||''; $('details').hidden=!result.details;
-    if(result.inventory){renderInventory(result.inventory);$('workspace').hidden=true;}else{render(result);} notice(result.message||'Your workspace is up to date.'); return result;
-  } catch(error) {notice(error.message,'error'); return null;} finally {clearInterval(timer); controls.forEach((node,i)=>node.disabled=disabled[i]);}
+let currentJob = null, pollTimer = null;
+async function api(operation, data={}) {
+  const response=await fetch('/api/'+operation,{method:'POST',headers:{'Content-Type':'application/json','X-App-Token':token},body:JSON.stringify({root,...data})});
+  const result=await response.json(); if(!response.ok) throw new Error(result.error||'The operation failed.'); return result;
 }
+function showResult(result) {
+  root=result.root; state=result; $('root').value=root; localStorage.setItem('organizer-folder',root);
+  if(result.inventory){renderInventory(result.inventory);$('workspace').hidden=true;$('report').hidden=true;$('query').value='';}
+  else if(result.files){$('workspace').hidden=false;render(result);}
+  notice(result.message||'Your workspace is up to date.');
+}
+async function request(operation, data={}, label='Working…') {
+  notice(label,'busy');
+  try {
+    const result=await api(operation,data);
+    if(result.job){root=result.job.root;localStorage.setItem('organizer-folder',root);watchJob(result.job);return null;}
+    showResult(result);return result;
+  } catch(error){notice(error.message,'error');return null;}
+}
+function showJob(job) {
+  currentJob=job; $('job-card').hidden=false;
+  $('job-title').textContent=job.operation+' · '+job.status;
+  $('job-message').textContent=job.message;
+  $('job-count').textContent=`${job.completed}${job.total===null?' completed (total not yet known)':' / '+job.total+' completed'} · ${job.failures} failure(s)`;
+  if(job.total===null){$('job-progress').removeAttribute('value');}else{$('job-progress').max=job.total||1;$('job-progress').value=job.completed;}
+  const active=['queued','running','cancelling'].includes(job.status);
+  $('cancel-job').hidden=!active; $('cancel-job').disabled=job.status==='cancelling';
+  $('resume-job').hidden=!['cancelled','interrupted','failed'].includes(job.status);
+}
+function watchJob(job) {
+  clearTimeout(pollTimer);showJob(job);
+  pollTimer=setTimeout(pollJob,750);
+}
+async function pollJob() {
+  try {
+    const {job}=await api('job',{id:currentJob.id,root:currentJob.root});showJob(job);
+    if(['queued','running','cancelling'].includes(job.status)){pollTimer=setTimeout(pollJob,750);return;}
+    if(job.result){
+      if(job.result.inventory)showResult(job.result);
+      else {const fresh=await api('state',{root:job.root});showResult({...fresh,...job.result});if(job.operation==='apply')$('report').replaceChildren(el('p','Index updated. Classify pending files to make contents searchable.'));}
+    }else{if(job.operation!=='inventory'){const fresh=await api('state',{root:job.root});showResult(fresh);}notice(job.message,job.status==='failed'?'error':'');}
+    await refreshJobs();
+  }catch(error){notice('Could not refresh job status: '+error.message,'error');}
+}
+async function refreshJobs() {
+  if(!root)return;
+  const {jobs}=await api('jobs');$('job-history').replaceChildren();
+  jobs.forEach(job=>{const button=el('button',`#${job.id} ${job.operation} · ${job.status}`,'quiet');button.onclick=()=>watchJob(job);$('job-history').append(button);});
+  if(jobs.length&&!currentJob)watchJob(jobs[0]);
+}
+$('cancel-job').onclick=async()=>{try{const result=await api('cancel-job',{id:currentJob.id,root:currentJob.root});watchJob(result.job);}catch(error){notice(error.message,'error');}};
+$('resume-job').onclick=async()=>{try{const result=await api('resume-job',{id:currentJob.id,root:currentJob.root});watchJob(result.job);}catch(error){notice(error.message,'error');}};
 function render(data) {
   const present=data.files.filter(file=>file.is_present);
   $('total').textContent=present.length; $('pending').textContent=present.filter(file=>file.status==='pending').length; $('proposals').textContent=data.actions.length;
@@ -68,3 +109,6 @@ $('save-scope').onclick=async()=>{
   const result=await request('save-scope',{folders:selected.filter(name=>name!=='.'),loose_files:selected.includes('.'),exclusions:$('exclusions').value.split(',').map(name=>name.trim()).filter(Boolean)},'Saving workspace scope…');
   if(result){$('scope-card').hidden=true;$('report').hidden=true;}
 };
+
+// Reconnect to saved job status after a browser reload without starting work.
+if($('root').value){root=$('root').value;refreshJobs().catch(error=>notice(error.message,'error'));}

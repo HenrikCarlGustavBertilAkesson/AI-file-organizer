@@ -25,6 +25,22 @@ responsiveness, AI workload limits, and organization consistency.
 Add focused tests with each step. The final benchmark validates the combined
 workflow rather than replacing those tests.
 
+## Current Progress
+
+- Step 1: complete — inventory and saved scope selection.
+- Step 2: complete — background worker, persisted job status/results, progress,
+  cooperative cancellation, restart recovery, and resumable processing.
+- Steps 3–7: remaining. Next is paginated library and database queries.
+
+Step 2 uses one background worker and keeps long operations out of HTTP request
+handling. Completed classifications and generated proposals are persisted.
+Cancelled scans restart; index repair does not apply partial results. Organization
+can restart from the saved index and pending proposals, but does not restore the
+previous AI conversation. In-flight file work or AI requests must finish before
+cancellation. Tests cover cancellation, recovery, persisted progress, and avoiding
+repeat classification; a localhost HTTP check verified responsiveness while a
+job was active.
+
 ## First Step: Choose What to Organize
 
 **Status: implemented.** The dashboard now provides metadata-only inventory,
@@ -32,8 +48,8 @@ top-level folder and loose-file selection, visible exclusions, project flags,
 and persisted scope via migration 4. Saved scopes constrain reconciliation,
 classification, search, agent tools, and move validation. Focused tests cover
 metadata-only inspection, incomplete inventory, exclusion pruning, persistence,
-and preservation of excluded indexed records. Background jobs and nested
-folder selection are not part of this implementation.
+and preservation of excluded indexed records. Background jobs were subsequently
+added in Step 2. Nested folder selection is not part of this implementation.
 
 ### User experience
 

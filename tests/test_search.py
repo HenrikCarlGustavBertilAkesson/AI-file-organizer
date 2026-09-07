@@ -91,6 +91,7 @@ class SearchTests(unittest.TestCase):
             connection.execute("DROP TRIGGER files_search_delete")
             connection.execute("DROP TABLE files_fts")
             connection.execute("DROP TABLE workspaces")
+            connection.execute("DROP TABLE jobs")
             connection.execute("PRAGMA user_version = 2")
         file = self.add("legacy.txt", "contract")
         database.create_database()
