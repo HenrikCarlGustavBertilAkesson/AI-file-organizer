@@ -15,7 +15,8 @@ def page_number(value, name):
     return value
 
 
-def library_page(root, *, page=1, page_size=50, status='', category=None, query='', action_page=1):
+def library_page(root, *, page=1, page_size=50, status='', category=None, query='', action_page=1,
+                 subdirectory=None):
     page_number(page, 'Page')
     page_number(action_page, 'Proposal page')
     page_number(page_size, 'Page size')
@@ -28,10 +29,13 @@ def library_page(root, *, page=1, page_size=50, status='', category=None, query=
     if not isinstance(query, str) or len(query) > 1000:
         raise ValueError('Search must be text of at most 1000 characters.')
     root = Path(root).expanduser().resolve()
+    directory = Path(subdirectory).resolve() if subdirectory else root
+    if not directory.is_relative_to(root):
+        raise ValueError('Directory is outside the workspace.')
     scope = load_scope(root)
     def allowed(value):
         path = Path(value)
-        return (path.is_relative_to(root) and path.resolve().is_relative_to(root)
+        return (path.is_relative_to(directory) and path.resolve().is_relative_to(root)
                 and (scope is None or scope.allows(path)))
     uri = Path(database.DATABASE).resolve().as_uri() + '?mode=ro'
     with closing(sqlite3.connect(uri, uri=True)) as connection:

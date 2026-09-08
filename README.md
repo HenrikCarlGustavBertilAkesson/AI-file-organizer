@@ -236,6 +236,56 @@ Do not hardcode API keys or commit them to Git.
 
 ## Development Status
 
+### Bounded AI batches and usage
+
+Classification defaults to **25 files per run**, configurable from 1–100 in the
+dashboard or with `--batch-size`:
+
+```bash
+python3 app/process_pending.py ~/Documents --batch-size 25
+```
+
+The batch uses pending files in the saved workspace, ordered by path; library
+search filters do not select classification candidates. Remaining records stay
+pending for another run. `--retry-failed` includes failed records. Unsupported
+and empty files count toward the file limit but do not need a classification
+request.
+
+Organization defaults to **25 candidate files and 10 proposals**, configurable
+up to 100 candidates and 50 proposals. Each run also has fixed upper limits:
+
+- 15 model rounds and 40 function-tool calls.
+- 45 API attempts shared by the organizer, nested classification, and retries.
+- 20 rows per index-tool page and 12,000 characters per serialized tool result.
+- 8,000 content characters returned by the read tool, and 120,000 characters of
+  serialized conversation before another model request is allowed.
+- 4,096 output tokens per organizer response and 2,048 per classification response.
+
+The agent now has indexed keyword search and bounded index browsing. It does not
+rescan/hash the workspace to list files. It can only read, classify, or propose
+moves for candidates previously returned by an index tool in that run. All
+tools still enforce the saved scope. Proposal validation and user approval are
+unchanged. Limits are ceilings; a run may produce fewer results.
+
+Transient API errors use up to two retries with exponential backoff and jitter.
+Numeric Retry-After delays are respected up to 30 seconds; waiting checks for
+cancellation. SDK retries are disabled so attempts are counted once. Requests
+use a 60-second SDK timeout. Authentication and other permanent errors are not
+retried. Classification permits at most three API attempts per selected file
+across the run.
+
+Migration 7 adds persisted job usage. The dashboard reports attempts, retries,
+and provider-reported input/output tokens, including nested classifier calls.
+Attempts without usage data are identified separately. These totals are not a
+billing estimate; failed or interrupted requests may not return token usage.
+Completed classifications and proposals survive cancellation or exhausted limits.
+Resuming or starting another run grants a new bounded allowance.
+
+API output caps and usage fields follow the
+[Responses API reference](https://developers.openai.com/api/reference/python/resources/responses/methods/create).
+Tests use mocked API calls, including an installed-SDK structured-output check;
+live model quality and large-folder throughput remain unbenchmarked.
+
 ### Paginated library and filters
 
 The dashboard loads 50 files per page by default, with choices of 25 or 100.

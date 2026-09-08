@@ -48,6 +48,7 @@ class ProposedAction:
 class AgentResult:
     message: str
     proposed_actions: list[ProposedAction]
+    usage: dict = field(default_factory=dict)
 
 @dataclass
 class DetectedMove:
