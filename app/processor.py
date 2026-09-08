@@ -2,6 +2,8 @@ from extractor import extract_text, is_supported
 from database import get_file_by_path, save_file
 from ai.classifier import classify_file
 from models import File, ActionStatus
+from ai.runtime import AILimitReached
+from jobs import JobCancelled
 
 
 def process_file(file: File):
@@ -68,6 +70,8 @@ def process_file(file: File):
 
         return file
 
+    except (AILimitReached, JobCancelled):
+        raise
     except Exception as error:
         print(f"  → FAILED: {error}")
 

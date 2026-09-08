@@ -28,6 +28,7 @@ function showJob(job) {
   currentJob=job; $('job-card').hidden=false;
   $('job-title').textContent=job.operation+' · '+job.status;
   $('job-message').textContent=job.message;
+  const usage=job.usage||{}; $('ai-usage').textContent=usage.attempts===undefined?'':`AI: ${usage.attempts}/${usage.max_attempts} attempts · ${usage.retries} retries · ${usage.input_tokens} input + ${usage.output_tokens} output tokens reported${usage.unreported_attempts?' · '+usage.unreported_attempts+' attempt(s) without usage data':''}. Reported tokens are not a billing estimate.`;
   $('job-count').textContent=`${job.completed}${job.total===null?' completed (total not yet known)':' / '+job.total+' completed'} · ${job.failures} failure(s)`;
   if(job.total===null){$('job-progress').removeAttribute('value');}else{$('job-progress').max=job.total||1;$('job-progress').value=job.completed;}
   const active=['queued','running','cancelling'].includes(job.status);
@@ -92,10 +93,10 @@ function renderReport(report){const box=$('report');box.hidden=false;box.replace
 }
 $('folder-form').onsubmit=async event=>{event.preventDefault();const result=await request('inventory',{root:$('root').value},'Opening folder…');if(result){$('report').hidden=true;$('query').value='';}};
 $('scan').onclick=()=>request('scan',{},'Scanning your folder…');
-$('classify').onclick=()=>request('classify',{retry:$('retry').checked},'Classifying files with AI…');
+$('classify').onclick=()=>request('classify',{retry:$('retry').checked,batch_size:Number($('batch-size').value)},'Classifying files with AI…');
 $('search-form').onsubmit=event=>{event.preventDefault();libraryOptions.query=$('query').value;libraryOptions.page=1;request('state',{},'Searching…');};
 $('clear').onclick=()=>{$('query').value='';$('status-filter').value='';$('category-filter').value='*';Object.assign(libraryOptions,{query:'',status:'',category:null,page:1});request('state');};
-$('organize-form').onsubmit=async event=>{event.preventDefault();const result=await request('organize',{request:$('request').value},'Preparing organization suggestions with AI…');if(result)$('review').scrollIntoView({behavior:'smooth'});};
+$('organize-form').onsubmit=async event=>{event.preventDefault();const result=await request('organize',{request:$('request').value,batch_size:Number($('candidate-limit').value),max_proposals:Number($('proposal-limit').value)},'Preparing organization suggestions with AI…');if(result)$('review').scrollIntoView({behavior:'smooth'});};
 
 function renderInventory(data){
   $('scope-card').hidden=false; $('scope-groups').replaceChildren();

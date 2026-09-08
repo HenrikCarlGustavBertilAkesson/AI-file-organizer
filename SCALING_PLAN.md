@@ -32,7 +32,10 @@ workflow rather than replacing those tests.
   cooperative cancellation, restart recovery, and resumable processing.
 - Step 3: complete — paginated library/search results, status/category filters,
   scoped SQL counts, bounded proposal pages, and metadata-only projections.
-- Steps 4–7: remaining. Next is bounded AI processing.
+- Step 4: complete — configurable classification/candidate/proposal limits,
+  bounded indexed agent tools, shared API attempt accounting, transient-error
+  retries, output/context limits, and persisted provider-reported token usage.
+- Steps 5–7: remaining. Next is consistent organization rules.
 
 Step 2 uses one background worker and keeps long operations out of HTTP request
 handling. Completed classifications and generated proposals are persisted.

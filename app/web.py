@@ -63,9 +63,12 @@ def dispatch(operation, data, *, progress=None):
         message = ('Index updated. Your files have not been moved.' if operation == 'apply'
                    else 'Scan complete. Review the changes below.')
     elif operation == 'classify':
-        result = process_pending(str(root), retry_failed=data.get('retry') is True, progress=progress)
+        result = process_pending(str(root), retry_failed=data.get('retry') is True, progress=progress,
+                                 batch_size=data.get('batch_size', 25))
+        extra['usage'] = result.usage
         message = (f'{result.classified} classified · {result.unsupported} unsupported · '
-                   f'{result.empty} empty · {result.failed} failed · {result.skipped} skipped')
+                   f'{result.empty} empty · {result.failed} failed · {result.skipped} skipped · '
+                   f'{result.remaining} outside this batch')
     elif operation == 'search':
         result = snapshot(root, data)
         return {**result, 'results': result['files'], 'message': 'Search complete.'}
@@ -78,7 +81,9 @@ def dispatch(operation, data, *, progress=None):
             if inside(action.source, root, scope) and inside(action.destination, root, scope):
                 database.save_action(action)
         result = run_agent(f'Allowed folder: {root}\nUser request: {request}', allowed_root=str(root),
-                           progress=progress, proposal_callback=persist_proposal)
+                           progress=progress, proposal_callback=persist_proposal,
+                           batch_size=data.get('batch_size', 25), max_proposals=data.get('max_proposals', 10))
+        extra['usage'] = result.usage
         for action in result.proposed_actions:
             if inside(action.source, root, scope) and inside(action.destination, root, scope):
                 database.save_action(action)

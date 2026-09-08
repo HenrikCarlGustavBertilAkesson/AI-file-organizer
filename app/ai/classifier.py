@@ -2,10 +2,11 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import os
+from ai.runtime import api_request
 
 load_dotenv()
 
-client = OpenAI()
+client = None
 
 MAX_CONTENT_LENGTH = 20_000
 
@@ -49,10 +50,13 @@ def classify_file(
     extension: str,
     content: str,
 ) -> Classification:
+    global client
+    if client is None:
+        client = OpenAI(max_retries=0, timeout=60.0)
 
     prepared_content = prepare_content(content)
 
-    response = client.responses.parse(
+    response = api_request(client.responses.parse,
         model="gpt-5.6-luna",
         input=[
             {
@@ -103,6 +107,9 @@ File content:
             }
         ],
         text_format=Classification,
+        max_output_tokens=2048,
     )
 
+    if response.output_parsed is None:
+        raise ValueError('The model did not return a complete classification.')
     return response.output_parsed

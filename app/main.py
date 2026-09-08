@@ -36,6 +36,7 @@ def main():
 
     print("\n--- AGENT RESULT ---\n")
     print(result.message)
+    print(f'AI usage: {result.usage}')
 
     for action in result.proposed_actions:
         save_action(action)

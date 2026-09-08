@@ -6,6 +6,7 @@ import json
 import time
 
 import database
+from ai.runtime import usage_scope, bounded_int
 
 OPERATIONS = {'inventory', 'scan', 'apply', 'classify', 'organize'}
 ACTIVE = {'queued', 'running', 'cancelling'}
@@ -31,6 +32,7 @@ def get_job(job_id):
     job = dict(row)
     job['parameters'] = json.loads(job['parameters'])
     job['result'] = json.loads(job['result']) if job['result'] else None
+    job['usage'] = json.loads(job['usage'])
     return job
 
 
@@ -50,6 +52,8 @@ class Progress:
     def __call__(self, completed=None, total=None, message='', failures=0, force=False):
         if self.cancelled.is_set():
             raise JobCancelled('Stopped at a safe boundary. Completed file work is saved.')
+        if completed is None and not message and not force:
+            return
         now = time.monotonic()
         if force or now - self.last_write >= 0.2:
             values = {'message': message, 'failures': failures}
@@ -77,6 +81,10 @@ class JobManager:
     def submit(self, operation, parameters, parent_id=None):
         if operation not in OPERATIONS:
             raise ValueError('This operation cannot run as a job.')
+        if operation in ('classify', 'organize'):
+            bounded_int(parameters.get('batch_size', 25), 100, 'Batch size')
+        if operation == 'organize':
+            bounded_int(parameters.get('max_proposals', 10), 50, 'Proposal limit')
         with self.lock:
             if self.busy():
                 raise ValueError('Another job is active. Wait or cancel it before starting another.')
@@ -95,7 +103,11 @@ class JobManager:
             update(job_id, status='running')
             progress = Progress(job_id, event)
             progress(message='Starting…', force=True)
-            result = self.runner(operation, parameters, progress=progress)
+            limit = parameters.get('batch_size', 25) * 3 if operation == 'classify' else 45
+            with usage_scope(limit,
+                             report=lambda usage: update(job_id, usage=json.dumps(usage)),
+                             progress=progress):
+                result = self.runner(operation, parameters, progress=progress)
             # Large file/action tables are refreshed separately by the UI.
             result = {key: value for key, value in result.items()
                       if key not in ('files', 'actions', 'summary', 'categories',

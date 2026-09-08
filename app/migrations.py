@@ -107,8 +107,12 @@ def _library_indexes(connection: sqlite3.Connection) -> None:
     connection.execute('CREATE INDEX actions_status_id ON actions(status,id)')
 
 
+def _job_ai_usage(connection: sqlite3.Connection) -> None:
+    connection.execute("ALTER TABLE jobs ADD COLUMN usage TEXT NOT NULL DEFAULT '{}'")
+
+
 MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index, _workspace_scopes,
-              _background_jobs, _library_indexes)
+              _background_jobs, _library_indexes, _job_ai_usage)
 
 
 def migrate(connection: sqlite3.Connection) -> None:
