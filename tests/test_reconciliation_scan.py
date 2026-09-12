@@ -21,16 +21,18 @@ class ScanCompletenessTests(unittest.TestCase):
                              [str(root / "nested" / "file.txt")])
             self.assertEqual(len(files[0].hash), 64)
 
-    def test_file_errors_abort_reconciliation_before_database_read(self):
+    def test_file_errors_abort_reconciliation_before_comparison(self):
         for error in (PermissionError("access denied"),
                       ValueError("File does not exist")):
             with self.subTest(error=error), tempfile.TemporaryDirectory() as directory:
                 (Path(directory) / "file.txt").write_text("hello")
                 with patch("scanner.scan_file", side_effect=error), \
-                     patch("reconciliation.get_all_files") as read_index:
+                     patch("reconciliation.get_all_files", return_value=[]) as read_index, \
+                     patch("reconciliation.compare_files") as compare:
                     with self.assertRaisesRegex(ScanError, "file.txt"):
                         reconcile_directory(directory)
-                    read_index.assert_not_called()
+                    read_index.assert_called_once()  # Read-only metadata cache.
+                    compare.assert_not_called()
 
     def test_directory_error_aborts_scan(self):
         def failed_walk(root, onerror, followlinks):

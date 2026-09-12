@@ -141,7 +141,10 @@ class IndexRepairTests(unittest.TestCase):
         os.utime(path, (before["modified"] + 60, before["modified"] + 60))
         result = reconcile_directory(str(self.root), apply=True)
         self.assertEqual(result.modified_paths, [])
-        self.assertEqual(database.get_file_by_path(str(path)), before)
+        self.assertEqual(result.metadata_paths, [str(path)])
+        after = database.get_file_by_path(str(path))
+        self.assertEqual(after['modified'], path.stat().st_mtime)
+        self.assertEqual({**after, 'modified': before['modified']}, before)
 
     def test_missing_legacy_hash_requires_reprocessing(self):
         path = self.indexed("file.txt", "original")

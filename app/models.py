@@ -56,8 +56,16 @@ class DetectedMove:
     new_path: str
 
 @dataclass
+class ScanStats:
+    mode: str = 'quick'
+    hashed_files: int = 0
+    reused_hashes: int = 0
+
+@dataclass
 class ReconciliationResult:
     new_paths: list[str]
     missing_paths: list[str]
     probable_moves: list[DetectedMove] = field(default_factory=list)
     modified_paths: list[str] = field(default_factory=list)
+    metadata_paths: list[str] = field(default_factory=list)
+    scan: ScanStats = field(default_factory=ScanStats)

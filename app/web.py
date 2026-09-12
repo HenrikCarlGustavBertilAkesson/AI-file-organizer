@@ -62,10 +62,13 @@ def dispatch(operation, data, *, progress=None):
     if operation == 'state':
         pass
     elif operation in ('scan', 'apply'):
-        result = reconcile_directory(str(root), apply=operation == 'apply', progress=progress)
+        result = reconcile_directory(str(root), apply=operation == 'apply', progress=progress,
+                                     full_verification=data.get('full_verification', False))
         extra['report'] = asdict(result)
         message = ('Index updated. Your files have not been moved.' if operation == 'apply'
                    else 'Scan complete. Review the changes below.')
+        mode = 'Full verification' if result.scan.mode == 'full' else 'Quick scan'
+        message += f' {mode}: {result.scan.hashed_files} files hashed; {result.scan.reused_hashes} hashes reused.'
     elif operation == 'classify':
         result = process_pending(str(root), retry_failed=data.get('retry') is True, progress=progress,
                                  batch_size=data.get('batch_size', 25))

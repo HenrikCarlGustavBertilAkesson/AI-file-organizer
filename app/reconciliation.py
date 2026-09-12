@@ -4,18 +4,31 @@ from contextlib import closing
 import sqlite3
 
 from database import create_database, get_all_files, get_connection, save_file
-from models import DetectedMove, ReconciliationResult
+from models import DetectedMove, ReconciliationResult, ScanStats
 from scanner import scan_directory
 from workspace import load_scope
 
 
-def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None) -> ReconciliationResult:
+def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None,
+                        full_verification: bool = False) -> ReconciliationResult:
+    if not isinstance(full_verification, bool):
+        raise ValueError('Full verification must be true or false.')
     root = Path(allowed_root).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f'Not a directory: {root}')
     scope = load_scope(root)
-    scanned_files = (scan_directory(str(root), scope=scope, progress=progress)
-                     if scope or progress else scan_directory(str(root)))
+    columns = ('path', 'hash', 'is_present', 'size', 'modified')
+    indexed_files = get_all_files(columns=columns)
+    cache = {row['path']: row for row in indexed_files
+             if Path(row['path']).is_relative_to(root)
+             and (scope is None or scope.allows(row['path']))}
+    stats = ScanStats()
+    scanned_files = scan_directory(str(root), scope=scope, progress=progress,
+                                   indexed_files=cache, full_verification=full_verification, stats=stats)
     if not apply:
-        return compare_files(root, scanned_files, get_all_files(columns=('path', 'hash', 'is_present')), scope=scope)
+        result = compare_files(root, scanned_files, indexed_files, scope=scope)
+        result.scan = stats
+        return result
 
     # Read and repair the index under one write transaction. Scanning must
     # finish successfully before we acquire the lock or change any records.
@@ -24,8 +37,9 @@ def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None
     with closing(get_connection()) as connection:
         with connection:
             connection.execute("BEGIN IMMEDIATE")
-            indexed_files = get_all_files(connection, columns=('path', 'hash', 'is_present'))
+            indexed_files = get_all_files(connection, columns=columns)
             result = compare_files(root, scanned_files, indexed_files, scope=scope)
+            result.scan = stats
             scanned_by_path = {file.path: file for file in scanned_files}
             indexed_by_path = {row["path"]: row for row in indexed_files}
             for move in result.probable_moves:
@@ -62,6 +76,12 @@ def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None
                 file = scanned_by_path[path]
                 file.status = "pending"
                 save_file(file, connection)
+            # Timestamp-only changes should not trigger hashing on every future
+            # quick scan. Preserve analysis when verified contents are identical.
+            for path in result.metadata_paths:
+                file = scanned_by_path[path]
+                connection.execute('UPDATE files SET size=?,modified=? WHERE path=?',
+                                   (file.size, file.modified, path))
     return result
 
 
@@ -89,6 +109,12 @@ def compare_files(root, scanned_files, indexed_files, *, scope=None) -> Reconcil
     modified_paths = [
         path for path in scanned_by_path.keys() & indexed_by_path.keys()
         if scanned_by_path[path].hash != indexed_by_path[path].get("hash")
+    ]
+    metadata_paths = [
+        path for path in scanned_by_path.keys() & indexed_by_path.keys()
+        if scanned_by_path[path].hash == indexed_by_path[path].get('hash')
+        and (scanned_by_path[path].size != indexed_by_path[path].get('size')
+             or scanned_by_path[path].modified != indexed_by_path[path].get('modified'))
     ]
 
     new_by_hash = defaultdict(list)
@@ -119,10 +145,13 @@ def compare_files(root, scanned_files, indexed_files, *, scope=None) -> Reconcil
         missing_paths=sorted(missing_paths),
         probable_moves=sorted(probable_moves, key=lambda move: move.old_path),
         modified_paths=sorted(modified_paths),
+        metadata_paths=sorted(metadata_paths),
     )
 
 def print_reconciliation(result: ReconciliationResult) -> None:
     print("\n--- FILESYSTEM RECONCILIATION ---")
+    print(f'\n{result.scan.mode.title()} scan: {result.scan.hashed_files} files hashed; '
+          f'{result.scan.reused_hashes} stored hashes reused.')
 
     print(f"\nNew files: {len(result.new_paths)}")
     for path in result.new_paths:
@@ -139,9 +168,12 @@ def print_reconciliation(result: ReconciliationResult) -> None:
     print(f"\nModified files: {len(result.modified_paths)}")
     for path in result.modified_paths:
         print(f"  * {path}")
+    print(f'\nMetadata-only updates: {len(result.metadata_paths)}')
+    for path in result.metadata_paths:
+        print(f'  ~ {path}')
 
     if not any((result.new_paths, result.missing_paths,
-                result.probable_moves, result.modified_paths)):
+                result.probable_moves, result.modified_paths, result.metadata_paths)):
         print("\nNo changes detected.")
 
 if __name__ == "__main__":
@@ -151,6 +183,8 @@ if __name__ == "__main__":
         description="Report filesystem changes; optionally repair the SQLite index."
     )
     parser.add_argument("directory")
+    parser.add_argument('--full-verification', action='store_true',
+                        help='Rehash every file; quick scans can miss same-size edits with unchanged timestamps')
     parser.add_argument("--apply", action="store_true",
                         help="Apply repairs to SQLite without changing files or calling AI")
     args = parser.parse_args()
@@ -158,7 +192,7 @@ if __name__ == "__main__":
     try:
         if args.apply:
             create_database()
-        result = reconcile_directory(args.directory, apply=args.apply)
+        result = reconcile_directory(args.directory, apply=args.apply, full_verification=args.full_verification)
     except (OSError, ValueError, sqlite3.Error) as error:
         parser.exit(1, f"Reconciliation failed: {error}\nNo index repairs committed.\n")
     print_reconciliation(result)

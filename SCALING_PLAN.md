@@ -38,7 +38,16 @@ workflow rather than replacing those tests.
 - Step 5: complete — reviewed, versioned category destinations reused across
   batches; deterministic destination/filename validation; custom and detected
   project protection; and candidate queries that skip already-organized files.
-- Steps 6–7: remaining. Next is incremental scanning.
+- Step 6: complete — quick scans reuse valid hashes for unchanged metadata;
+  full verification rereads every file; reports show hashed/reused counts;
+  metadata-only repairs preserve classification; scan mode survives job resumption.
+- Step 7: backlogged at the user's request — large-folder validation and
+  benchmarks remain unfinished. Steps 1–6 are complete; the full scaling plan
+  is not finished, and whole-Desktop readiness has not been established.
+
+The next feature to plan is confirmed file cleanup, described in
+[CLEANUP_FEATURE_PLAN.md](CLEANUP_FEATURE_PLAN.md). Its focused correctness and
+recovery tests are required independently of the deferred scaling benchmarks.
 
 Step 2 uses one background worker and keeps long operations out of HTTP request
 handling. Completed classifications and generated proposals are persisted.

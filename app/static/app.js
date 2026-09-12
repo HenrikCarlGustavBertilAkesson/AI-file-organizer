@@ -26,7 +26,8 @@ async function request(operation, data={}, label='Working…') {
 }
 function showJob(job) {
   currentJob=job; $('job-card').hidden=false;
-  $('job-title').textContent=job.operation+' · '+job.status;
+  const scanMode=['scan','apply'].includes(job.operation)&&typeof job.parameters.full_verification==='boolean'?(job.parameters.full_verification?' · Full verification':' · Quick scan'):'';
+  $('job-title').textContent=job.operation+scanMode+' · '+job.status;
   $('job-message').textContent=job.message;
   const usage=job.usage||{}; $('ai-usage').textContent=usage.attempts===undefined?'':`AI: ${usage.attempts}/${usage.max_attempts} attempts · ${usage.retries} retries · ${usage.input_tokens} input + ${usage.output_tokens} output tokens reported${usage.unreported_attempts?' · '+usage.unreported_attempts+' attempt(s) without usage data':''}. Reported tokens are not a billing estimate.`;
   $('job-count').textContent=`${job.completed}${job.total===null?' completed (total not yet known)':' / '+job.total+' completed'} · ${job.failures} failure(s)`;
@@ -88,12 +89,13 @@ function renderFiles(files) {
   files.forEach(file=>{const row=el('tr'),name=el('td'); name.append(el('strong',file.filename),el('span',file.path,'path'));if(file.snippet||file.description)name.append(el('p',file.snippet||file.description));const status=el('td');status.append(el('span',file.is_present===0?'missing':(file.status||'Not classified'),'badge'));row.append(name,el('td',file.category||'—'),status);$('files').append(row);});
 }
 function renderReport(report){const box=$('report');box.hidden=false;box.replaceChildren();let count=0;
-  [['New files',report.new_paths],['Missing files',report.missing_paths],['Modified files',report.modified_paths],['Probable moves',report.probable_moves.map(move=>move.old_path+' → '+move.new_path)]].forEach(([label,paths])=>{count+=paths.length; if(paths.length){box.append(el('strong',`${label} (${paths.length})`));const list=el('ul');paths.forEach(path=>list.append(el('li',path)));box.append(list);}});
+  if(report.scan)box.append(el('p',`${report.scan.mode==='full'?'Full verification':'Quick scan'} · ${report.scan.hashed_files} files hashed · ${report.scan.reused_hashes} hashes reused`,'hint'));
+  [['New files',report.new_paths],['Missing files',report.missing_paths],['Modified files',report.modified_paths],['Metadata-only updates',report.metadata_paths||[]],['Probable moves',report.probable_moves.map(move=>move.old_path+' → '+move.new_path)]].forEach(([label,paths])=>{count+=paths.length; if(paths.length){box.append(el('strong',`${label} (${paths.length})`));const list=el('ul');paths.forEach(path=>list.append(el('li',path)));box.append(list);}});
   if(!count)box.append(el('p','No changes detected.'));
-  else {const apply=el('button','Update index','secondary');apply.onclick=async()=>{const result=await request('apply',{},'Updating your index…');if(result){box.replaceChildren(el('p','Index updated. Classify pending files to make their contents searchable.'));}};box.append(apply,el('p','Updates the local index only. Does not move or delete files.','hint'));}
+  else {const apply=el('button','Update index','secondary');apply.onclick=async()=>{const result=await request('apply',{full_verification:report.scan?.mode==='full'},'Updating your index…');if(result){box.replaceChildren(el('p','Index updated. Classify pending files to make their contents searchable.'));}};box.append(apply,el('p','Updates the local index only. Does not move or delete files.','hint'));}
 }
 $('folder-form').onsubmit=async event=>{event.preventDefault();const result=await request('inventory',{root:$('root').value},'Opening folder…');if(result){$('report').hidden=true;$('query').value='';}};
-$('scan').onclick=()=>request('scan',{},'Scanning your folder…');
+$('scan').onclick=()=>request('scan',{full_verification:$('full-verification').checked},'Scanning your folder…');
 $('classify').onclick=()=>request('classify',{retry:$('retry').checked,batch_size:Number($('batch-size').value)},'Classifying files with AI…');
 $('search-form').onsubmit=event=>{event.preventDefault();libraryOptions.query=$('query').value;libraryOptions.page=1;request('state',{},'Searching…');};
 $('clear').onclick=()=>{$('query').value='';$('status-filter').value='';$('category-filter').value='*';Object.assign(libraryOptions,{query:'',status:'',category:null,page:1});request('state');};
