@@ -45,7 +45,8 @@ workflow rather than replacing those tests.
   benchmarks remain unfinished. Steps 1–6 are complete; the full scaling plan
   is not finished, and whole-Desktop readiness has not been established.
 
-The next feature to plan is confirmed file cleanup, described in
+The next feature to plan is bulk category organization with user-directed
+deletion, described in
 [CLEANUP_FEATURE_PLAN.md](CLEANUP_FEATURE_PLAN.md). Its focused correctness and
 recovery tests are required independently of the deferred scaling benchmarks.
 
