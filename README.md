@@ -237,6 +237,39 @@ Do not hardcode API keys or commit them to Git.
 
 ## Development Status
 
+### Incremental scanning and full verification
+
+Reconciliation now defaults to a **quick scan**. It reuses a present file's stored
+SHA-256 hash only when its path, size, and stored modification time match and the
+stored hash is valid. New files, files with changed metadata, returning missing
+files, and files without a valid hash are read and hashed. Excluded locations
+remain excluded in both modes.
+
+For a full content check, enable **Full verification** in the dashboard or run:
+
+```bash
+python3 app/reconciliation.py ~/Documents --full-verification
+python3 app/reconciliation.py ~/Documents --full-verification --apply
+```
+
+Full verification rereads every included file. Quick scans can miss same-size
+content changes with an unchanged modification timestamp (at the precision
+stored in the index). They are a performance tradeoff, not proof that contents
+are identical. Reports show the scan mode and counts of files hashed and hashes
+reused. The dashboard uses the preview's mode when applying index repairs; job
+resumption retains the selected mode.
+
+Timestamp-only changes with identical hashes are reported as metadata-only
+updates. Applying them refreshes size/time without clearing classification, so
+future quick scans can reuse the hash. Preview remains read-only; without apply,
+new or changed metadata is not cached for subsequent scans. No new database
+schema is needed for this step.
+
+Incomplete or cancelled scans never apply partial reconciliation results. A
+file whose size, timestamps, or identity changes while hashing aborts the scan
+so it can be retried. Neither mode provides an atomic snapshot of files being
+actively edited. Classification still freshly scans files before processing.
+
 ### Consistent organization rules
 
 Before starting AI organization, review the draft category-to-folder table and
@@ -405,7 +438,7 @@ its scope. Excluded indexed records remain stored and are not marked missing.
 Move sources and destinations must both be in scope. Selecting only loose
 files does not authorize moves into unselected subfolders; select the intended
 destination folder as well. This first version selects top-level folders,
-does not yet implement incremental hashing from the scaling roadmap.
+uses the incremental/full-verification modes described above.
 
 ### Keyword search
 

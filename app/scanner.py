@@ -1,8 +1,9 @@
 import hashlib
 import os
 import stat
+import re
 from pathlib import Path
-from models import File
+from models import File, ScanStats
 
 
 class ScanError(OSError):
@@ -28,6 +29,11 @@ def scan_file(path: str) -> File:
         raise ValueError(f"Not a file: {path}")
 
     stat = file_path.stat()
+    file_hash = calculate_hash(file_path)
+    after = file_path.stat()
+    if (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino, stat.st_dev) != (
+            after.st_size, after.st_mtime_ns, after.st_ctime_ns, after.st_ino, after.st_dev):
+        raise ScanError(f'File changed while hashing: {file_path}. Retry the scan.')
 
     return File(
         path=str(file_path),
@@ -35,10 +41,11 @@ def scan_file(path: str) -> File:
         extension=file_path.suffix.lower(),
         size=stat.st_size,
         modified=stat.st_mtime,
-        hash=calculate_hash(file_path),
+        hash=file_hash,
     )
 
-def scan_directory(directory: str, *, scope=None, progress=None):
+def scan_directory(directory: str, *, scope=None, progress=None, indexed_files=None,
+                   full_verification=False, stats=None):
     root = Path(directory).expanduser().resolve()
 
     if not root.exists():
@@ -48,6 +55,10 @@ def scan_directory(directory: str, *, scope=None, progress=None):
         raise ValueError(f"Not a directory: {directory}")
 
     files = []
+    cached = indexed_files or {}
+    stats = stats if stats is not None else ScanStats()
+    stats.mode = 'full' if full_verification else 'quick'
+    stats.hashed_files = stats.reused_hashes = 0
 
     def traversal_error(error: OSError) -> None:
         raise ScanError(
@@ -68,15 +79,32 @@ def scan_directory(directory: str, *, scope=None, progress=None):
             if scope and not scope.allows(path):
                 continue
             if progress:
-                progress(len(files), message=f'Reading {path}')
+                progress(len(files), message=f'Checking {path}')
             try:
                 # stat raises on inaccessible/disappearing files instead of
                 # treating them as absent. Ignore non-regular filesystem entries.
-                if stat.S_ISREG(path.stat().st_mode):
-                    files.append(scan_file(str(path)))
+                resolved = path.resolve()
+                info = resolved.stat()
+                if stat.S_ISREG(info.st_mode):
+                    previous = cached.get(str(resolved), {})
+                    stored_hash = previous.get('hash')
+                    reusable = (not full_verification and previous.get('is_present')
+                                and isinstance(stored_hash, str)
+                                and re.fullmatch(r'[0-9a-fA-F]{64}', stored_hash)
+                                and previous.get('size') == info.st_size
+                                and previous.get('modified') == info.st_mtime)
+                    if reusable:
+                        files.append(File(str(resolved), resolved.name, resolved.suffix.lower(),
+                                          info.st_size, info.st_mtime, hash=stored_hash))
+                        stats.reused_hashes += 1
+                    else:
+                        files.append(scan_file(str(path)))
+                        stats.hashed_files += 1
             except (OSError, ValueError) as error:
                 raise ScanError(f"Could not scan file {path}: {error}") from error
 
     if progress:
-        progress(len(files), len(files), 'Scan complete', force=True)
+        progress(len(files), len(files),
+                 f'{stats.mode.title()} scan complete: {stats.hashed_files} hashed, '
+                 f'{stats.reused_hashes} hashes reused', force=True)
     return files

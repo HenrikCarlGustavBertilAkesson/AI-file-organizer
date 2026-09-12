@@ -79,8 +79,13 @@ class JobManager:
         return self.active_id is not None
 
     def submit(self, operation, parameters, parent_id=None):
+        parameters = dict(parameters)
         if operation not in OPERATIONS:
             raise ValueError('This operation cannot run as a job.')
+        if operation in ('scan', 'apply') and not isinstance(parameters.get('full_verification', False), bool):
+            raise ValueError('Full verification must be true or false.')
+        if operation in ('scan', 'apply'):
+            parameters.setdefault('full_verification', False)
         if operation in ('classify', 'organize'):
             bounded_int(parameters.get('batch_size', 25), 100, 'Batch size')
         if operation == 'organize':
@@ -135,6 +140,9 @@ class JobManager:
         job = get_job(job_id)
         if job['status'] not in ('cancelled', 'interrupted', 'failed'):
             raise ValueError('Only stopped or failed jobs can be resumed.')
+        if job['operation'] in ('scan', 'apply'):
+            # Jobs created before scan modes existed always hashed every file.
+            job['parameters'].setdefault('full_verification', True)
         return self.submit(job['operation'], job['parameters'], parent_id=job_id)
 
     def close(self):
