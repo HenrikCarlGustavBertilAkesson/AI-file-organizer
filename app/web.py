@@ -15,6 +15,7 @@ from jobs import JobManager, OPERATIONS, get_job, recent_jobs
 from library import library_page
 from models import ProposedAction
 from contextlib import closing
+from organization_policy import policy_view, save_policy, load_policy
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -40,7 +41,7 @@ def snapshot(root, options=None):
     for data in result['actions']:
         action = ProposedAction(**data)
         data['valid'], data['validation_error'] = validate_action(action, str(root))
-    return {'root': str(root), **result}
+    return {'root': str(root), **result, 'policy': policy_view(root)}
 
 
 def dispatch(operation, data, *, progress=None):
@@ -52,6 +53,9 @@ def dispatch(operation, data, *, progress=None):
     if operation == 'save-scope':
         save_scope(root, data.get('folders'), data.get('loose_files'), data.get('exclusions'))
         return {**snapshot(root, data), 'message': 'Workspace scope saved. Scan to check the selected files.'}
+    if operation == 'save-policy':
+        save_policy(root, data.get('rules'), data.get('protected_folders'))
+        return {**snapshot(root, data), 'message': 'Organization policy saved. Future proposals must follow these rules.'}
     scope = load_scope(root)
     message = ''
     extra = {}
@@ -152,6 +156,8 @@ class Handler(BaseHTTPRequestHandler):
             operation = self.path.removeprefix('/api/')
             if operation in OPERATIONS:
                 data['root'] = str(selected_root(data.get('root')))
+                if operation == 'organize' and load_policy(data['root']) is None:
+                    raise ValueError('Review and save your organization policy first.')
                 result = {'job': self.server.jobs.submit(operation, data)}
             elif operation == 'jobs':
                 result = {'jobs': recent_jobs(str(selected_root(data.get('root'))))}
@@ -165,7 +171,7 @@ class Handler(BaseHTTPRequestHandler):
                     job = self.server.jobs.resume(job['id'])
                 result = {'job': job}
             else:
-                if operation in ('save-scope', 'review') and self.server.jobs.busy():
+                if operation in ('save-scope', 'save-policy', 'review') and self.server.jobs.busy():
                     raise ValueError('Wait for the active job to finish before changing scope or reviewing moves.')
                 result = dispatch(operation, data)
             self.send(200, json.dumps(result).encode(), 'application/json')

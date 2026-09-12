@@ -111,8 +111,15 @@ def _job_ai_usage(connection: sqlite3.Connection) -> None:
     connection.execute("ALTER TABLE jobs ADD COLUMN usage TEXT NOT NULL DEFAULT '{}'")
 
 
+def _organization_policies(connection: sqlite3.Connection) -> None:
+    connection.execute('''CREATE TABLE organization_policies (
+        root TEXT PRIMARY KEY, configuration TEXT NOT NULL, version INTEGER NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+
 MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index, _workspace_scopes,
-              _background_jobs, _library_indexes, _job_ai_usage)
+              _background_jobs, _library_indexes, _job_ai_usage, _organization_policies)
 
 
 def migrate(connection: sqlite3.Connection) -> None:

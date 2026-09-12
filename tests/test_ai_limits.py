@@ -11,6 +11,7 @@ import database
 from ai.runtime import Budget, AILimitReached, api_request, usage_scope
 from jobs import JobManager, JobCancelled, get_job
 from models import File, ProposedAction
+from organization_policy import save_policy
 from process_pending import process_pending
 
 
@@ -76,6 +77,7 @@ class BatchAndAgentTests(unittest.TestCase):
             path.write_text('contract')
             database.save_file(File(str(path), path.name, '.txt', 8, 0,
                                     content='contract', status='pending'))
+        save_policy(self.root, [{'category': 'Work', 'folder': 'Sorted'}], [])
         fake_tools = SimpleNamespace(read_file=Mock(return_value={'content': 'x'*20000}),
                                      classify_path=Mock(),
                                      propose_move=lambda **kwargs: ProposedAction('move', **kwargs))
@@ -117,6 +119,8 @@ class BatchAndAgentTests(unittest.TestCase):
         self.assertLessEqual(len(result['content']), 8000)
 
     def test_proposal_limit_stops_within_one_model_response(self):
+        with database.get_connection() as connection:
+            connection.execute("UPDATE files SET category='Work',status='classified'")
         def function(name, arguments, identifier):
             class Call:
                 type = 'function_call'
@@ -127,7 +131,7 @@ class BatchAndAgentTests(unittest.TestCase):
             return call
         calls = [function('get_indexed_files', {'page': 1}, 'browse')]
         calls += [function('propose_move', {'source': str(self.root / f'{index}.txt'),
-                 'destination': str(self.root / f'new{index}.txt'), 'reason': 'Organize'}, str(index)) for index in range(3)]
+                 'destination': str(self.root / 'Sorted' / f'{index}.txt'), 'reason': 'Organize'}, str(index)) for index in range(3)]
         result = response()
         result.output, result.output_text = calls, ''
         create = Mock(return_value=result)

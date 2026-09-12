@@ -11,6 +11,7 @@ from library import library_page
 from actions.validator import validate_action
 from ai.runtime import api_request, usage_scope, bounded_int, AILimitReached
 from tools.file_tools import read_file, classify_path, propose_move
+from organization_policy import load_policy, protected_reason
 
 client = None
 MAX_AGENT_STEPS = 15
@@ -65,9 +66,11 @@ def call_tool(name, arguments, allowed_root=None, progress=None, *, candidates=N
             arguments[key] = str(path)
     candidates = candidates if candidates is not None else set()
     if name in ('search_files', 'get_indexed_files', 'list_files'):
+        policy = load_policy(root)
         result = library_page(root, page=arguments.get('page', 1), page_size=20,
                               query=arguments.get('query', ''),
-                              subdirectory=arguments.get('directory') if name == 'list_files' else None)
+                              subdirectory=arguments.get('directory') if name == 'list_files' else None,
+                              organization_candidates=policy is not None)
         rows, length = [], 0
         for row in result['files']:
             if name == 'list_files' and not Path(row['path']).is_relative_to(Path(arguments['directory'])):
@@ -75,6 +78,13 @@ def call_tool(name, arguments, allowed_root=None, progress=None, *, candidates=N
             if row['path'] not in candidates and len(candidates) >= max_files:
                 continue
             payload = {key: row[key] for key in ('path', 'filename', 'category', 'description', 'status', 'snippet')}
+            if policy:
+                reason = protected_reason(row['path'], root, policy.protected_folders)
+                if reason:
+                    continue
+                folder = policy.destinations.get((row['category'] or '').strip().casefold())
+                payload['policy_destination'] = str(root / folder / row['filename']) if folder else None
+                payload['already_organized'] = payload['policy_destination'] == row['path']
             size = len(json.dumps(payload))
             if length + size > MAX_TOOL_CHARACTERS - 1000:
                 break
@@ -112,6 +122,8 @@ def run_agent(user_request, allowed_root=None, *, progress=None, proposal_callba
     bounded_int(max_proposals, 50, 'Proposal limit')
     if not allowed_root:
         raise ValueError('Choose a workspace before organizing.')
+    if load_policy(allowed_root) is None:
+        raise ValueError('Review and save an organization policy before starting AI organization.')
     if len(user_request) > 8000:
         raise ValueError('Keep the organization request under 8000 characters.')
     with usage_scope(45, progress=progress) as budget:
@@ -126,7 +138,13 @@ def _run_agent(user_request, allowed_root, progress, proposal_callback, batch_si
     if client is None:
         client = OpenAI(max_retries=0, timeout=60.0)
     scope = load_scope(allowed_root)
+    policy = load_policy(allowed_root)
     user_request += f'\nLimits: {batch_size} candidate files; {max_proposals} proposals.'
+    if policy:
+        user_request += ('\nReviewed organization policy: ' + json.dumps(asdict(policy)) +
+                        '\nUse the exact category destination and retain the original filename. '
+                        'Do not invent subfolders. Leave already-organized, unmapped, and protected files in place. '
+                        'Classify unclassified candidates before proposing moves.')
     if scope:
         user_request += '\nWorkspace scope: ' + json.dumps(asdict(scope))
     messages = [{'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': user_request}]
