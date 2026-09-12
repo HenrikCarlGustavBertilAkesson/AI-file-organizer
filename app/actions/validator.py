@@ -2,6 +2,7 @@ from pathlib import Path
 
 from models import ProposedAction
 from workspace import load_scope
+from organization_policy import validate_policy_action
 
 
 def is_inside_directory(path: Path, root: Path) -> bool:
@@ -45,5 +46,9 @@ def validate_action(
 
     if destination.exists():
         return False, "Destination already exists."
+
+    policy_error = validate_policy_action(action, root)
+    if policy_error:
+        return False, policy_error
 
     return True, ""

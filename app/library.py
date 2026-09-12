@@ -16,7 +16,7 @@ def page_number(value, name):
 
 
 def library_page(root, *, page=1, page_size=50, status='', category=None, query='', action_page=1,
-                 subdirectory=None):
+                 subdirectory=None, organization_candidates=False):
     page_number(page, 'Page')
     page_number(action_page, 'Proposal page')
     page_number(page_size, 'Page size')
@@ -51,6 +51,21 @@ def library_page(root, *, page=1, page_size=50, status='', category=None, query=
             f"SELECT DISTINCT coalesce(category,'') FROM files WHERE {base} ORDER BY 1")]
         conditions = [base, 'files.is_present = ?']
         parameters = [0 if status == 'missing' else 1]
+        if organization_candidates:
+            from organization_policy import load_policy, protected_reason
+            policy = load_policy(root)
+            def needs_organization(path, filename, category, status):
+                if policy is None or protected_reason(path, root, policy.protected_folders):
+                    return False
+                if status in ('unsupported', 'empty', 'failed'):
+                    return False
+                if status == 'classified':
+                    folder = policy.destinations.get((category or '').strip().casefold())
+                    return folder is not None and (root / folder / filename).resolve() != Path(path).resolve()
+                return True
+            connection.create_function('needs_organization', 4, needs_organization)
+            conditions.append('needs_organization(files.path,files.filename,files.category,files.status)')
+            conditions.append("NOT EXISTS (SELECT 1 FROM actions WHERE actions.source=files.path AND actions.status='pending')")
         if status and status != 'missing':
             conditions.append('files.status = ?')
             parameters.append(status)

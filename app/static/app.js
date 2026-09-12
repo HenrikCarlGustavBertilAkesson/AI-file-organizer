@@ -59,6 +59,7 @@ async function refreshJobs() {
 $('cancel-job').onclick=async()=>{try{const result=await api('cancel-job',{id:currentJob.id,root:currentJob.root});watchJob(result.job);}catch(error){notice(error.message,'error');}};
 $('resume-job').onclick=async()=>{try{const result=await api('resume-job',{id:currentJob.id,root:currentJob.root});watchJob(result.job);}catch(error){notice(error.message,'error');}};
 function render(data) {
+  renderPolicy(data.policy);
   $('total').textContent=data.summary.total; $('pending').textContent=data.summary.pending; $('proposals').textContent=data.action_pagination.total;
   renderFiles(data.files);
   libraryOptions.page=data.pagination.page;libraryOptions.action_page=data.action_pagination.page;
@@ -130,3 +131,24 @@ $('previous-page').onclick=()=>{libraryOptions.page--;request('state');};
 $('next-page').onclick=()=>{libraryOptions.page++;request('state');};
 $('previous-actions').onclick=()=>{libraryOptions.action_page--;request('state');};
 $('next-actions').onclick=()=>{libraryOptions.action_page++;request('state');};
+
+let policyRoot='', policyVersion=null;
+function addPolicyRule(category='',folder='') {
+  const row=el('div',undefined,'row');row.classList.add('policy-rule');
+  const categoryInput=document.createElement('input');categoryInput.value=category;categoryInput.placeholder='Category';categoryInput.setAttribute('aria-label','Category');categoryInput.className='rule-category';
+  const folderInput=document.createElement('input');folderInput.value=folder;folderInput.placeholder='SelectedFolder/Category';folderInput.setAttribute('aria-label','Destination folder relative to workspace');folderInput.className='rule-folder';
+  const remove=el('button','Remove','quiet');remove.type='button';remove.onclick=()=>row.remove();row.append(categoryInput,folderInput,remove);$('policy-rules').append(row);
+}
+function renderPolicy(policy) {
+  if(!policy)return;
+  $('policy-status').textContent=policy.version?`Saved policy · version ${policy.version}. Reused across organization batches.`:'Draft only. Edit and save these rules before requesting organization.';
+  if(policyRoot===policy.root&&policyVersion===policy.version)return;
+  policyRoot=policy.root;policyVersion=policy.version;$('policy-rules').replaceChildren();
+  Object.entries(policy.destinations).forEach(([category,folder])=>addPolicyRule(category,folder));
+  $('protected-folders').value=policy.protected_folders.join('\n');
+}
+$('add-rule').onclick=()=>addPolicyRule();
+$('save-policy').onclick=()=>{
+  const rules=[...document.querySelectorAll('.policy-rule')].map(row=>({category:row.querySelector('.rule-category').value,folder:row.querySelector('.rule-folder').value}));
+  request('save-policy',{rules,protected_folders:$('protected-folders').value.split('\n').map(value=>value.trim()).filter(Boolean)},'Saving organization rules…');
+};

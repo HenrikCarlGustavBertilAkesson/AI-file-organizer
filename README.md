@@ -209,8 +209,9 @@ python3 app/web.py
 Open **http://127.0.0.1:8765**. Paste a folder path and choose **Preview folder**.
 Review the inventory, select the folders you want, and choose **Use this scope**.
 Then choose **Scan for changes**, review the report, and **Update index**.
-Use **Classify pending files** to extract and classify documents, search your
-library, and **Suggest organization** to generate moves for individual approval.
+Use **Classify pending files** to extract and classify documents and search your
+library. Review and save the category destinations under **Review organization
+rules**, then use **Suggest organization** to generate moves for individual approval.
 Classification and organization use the AI API and require your configured key
 and existing document-processing dependencies. The dashboard itself adds no
 dependencies. It opens without an API key for scanning, indexing, and search.
@@ -235,6 +236,44 @@ python3 app/main.py
 Do not hardcode API keys or commit them to Git.
 
 ## Development Status
+
+### Consistent organization rules
+
+Before starting AI organization, review the draft category-to-folder table and
+choose **Save organization policy**. Each category maps to one folder relative
+to the workspace, for example `Work → Documents/Contracts`. Edit the draft to
+reuse existing destinations, remove unwanted categories, or add your own rules.
+Migration 8 stores the reviewed policy and its revision for each workspace.
+The same policy is used across batches and server restarts.
+
+Destinations must stay within the saved scope. New subfolders under a selected
+folder can be created during an approved move; saving rules itself creates no
+folders and moves no files. If only loose files are selected, first create and
+select a destination parent folder in the workspace scope. Rules do not silently
+expand the scope.
+
+The validator enforces the classified category's exact destination and preserves
+the original filename. It rejects invented subfolders, renaming, and moves of
+unclassified or unmapped files. Unknown categories stay in place until a rule is
+added. Each move still needs approval and is revalidated immediately before
+execution. Changing a rule can invalidate pending proposals; reject outdated
+proposals before requesting replacements.
+
+Add relative paths under **Additional protected folders** to preserve structures
+that project detection cannot recognize. Detected project directories are always
+protected against individual file moves, including moves into them. Protection
+checks ancestor directories within the workspace for markers such as `.git`,
+`package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, and `.xcodeproj` entries.
+This is a filename-based heuristic; custom protected paths cover other layouts.
+Project markers are checked again at execution, not just during inventory.
+
+Agent candidate queries omit already-organized, protected, unsupported/empty/failed,
+unmapped classified files, and sources with pending proposals before pagination.
+This allows successive batches to reach remaining eligible files. Ordinary file
+search and classification continue to use the workspace scope; protection here
+governs organization. Legacy manual proposals without a saved policy retain their
+existing approval flow with project protection, while AI organization requires a
+saved policy.
 
 ### Bounded AI batches and usage
 

@@ -111,7 +111,7 @@ class JobManager:
             # Large file/action tables are refreshed separately by the UI.
             result = {key: value for key, value in result.items()
                       if key not in ('files', 'actions', 'summary', 'categories',
-                                     'pagination', 'action_pagination')}
+                                     'pagination', 'action_pagination', 'policy')}
             update(job_id, status='succeeded', result=json.dumps(result),
                    message=result.get('message') or 'Completed.')
         except JobCancelled as error:

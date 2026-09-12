@@ -35,7 +35,10 @@ workflow rather than replacing those tests.
 - Step 4: complete — configurable classification/candidate/proposal limits,
   bounded indexed agent tools, shared API attempt accounting, transient-error
   retries, output/context limits, and persisted provider-reported token usage.
-- Steps 5–7: remaining. Next is consistent organization rules.
+- Step 5: complete — reviewed, versioned category destinations reused across
+  batches; deterministic destination/filename validation; custom and detected
+  project protection; and candidate queries that skip already-organized files.
+- Steps 6–7: remaining. Next is incremental scanning.
 
 Step 2 uses one background worker and keeps long operations out of HTTP request
 handling. Completed classifications and generated proposals are persisted.
