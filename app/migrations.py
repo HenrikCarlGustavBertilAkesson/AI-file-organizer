@@ -118,8 +118,32 @@ def _organization_policies(connection: sqlite3.Connection) -> None:
     )''')
 
 
+def _organization_groups(connection):
+    connection.execute("""CREATE TABLE organization_groups (
+        id INTEGER PRIMARY KEY, root TEXT NOT NULL, category TEXT NOT NULL,
+        destination TEXT, context TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(root, category)
+    )""")
+    connection.execute("""CREATE TABLE organization_group_members (
+        group_id INTEGER NOT NULL, file_id INTEGER NOT NULL,
+        snapshot TEXT NOT NULL, state TEXT NOT NULL, size INTEGER NOT NULL,
+        PRIMARY KEY(group_id, file_id)
+    )""")
+    connection.execute("""CREATE TABLE organization_batches (
+        id INTEGER PRIMARY KEY, root TEXT NOT NULL, operation TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status='draft'), context TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    connection.execute("""CREATE TABLE organization_batch_members (
+        batch_id INTEGER NOT NULL, file_id INTEGER NOT NULL,
+        group_id INTEGER NOT NULL, group_version INTEGER NOT NULL,
+        snapshot TEXT NOT NULL, PRIMARY KEY(batch_id, file_id)
+    )""")
+
+
 MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index, _workspace_scopes,
-              _background_jobs, _library_indexes, _job_ai_usage, _organization_policies)
+              _background_jobs, _library_indexes, _job_ai_usage, _organization_policies,
+              _organization_groups)
 
 
 def migrate(connection: sqlite3.Connection) -> None:
