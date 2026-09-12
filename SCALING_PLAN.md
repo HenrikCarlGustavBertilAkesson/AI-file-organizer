@@ -47,7 +47,7 @@ workflow rather than replacing those tests.
 
 The next feature to plan is bulk category organization with user-directed
 deletion, described in
-[CLEANUP_FEATURE_PLAN.md](CLEANUP_FEATURE_PLAN.md). Its focused correctness and
+[BULK_ORGANIZATION_PLAN.md](BULK_ORGANIZATION_PLAN.md). Its focused correctness and
 recovery tests are required independently of the deferred scaling benchmarks.
 
 Step 2 uses one background worker and keeps long operations out of HTTP request
