@@ -512,3 +512,26 @@ The project currently has working:
 Filesystem reconciliation is the next major area under development.
 
 See `PROJECT_PLAN.md` for the architectural history and planned next steps.
+
+
+## Category group preview (bulk organization Step 1)
+
+Preview existing classified files grouped by normalized category and saved folder
+policy, with counts, logical sizes, and organized/needs-move/blocked/unmapped states:
+
+```bash
+python3 app/groups.py /path/to/workspace
+python3 app/groups.py /path/to/workspace --group 1 --page 1 --page-size 50
+```
+
+Run from the same working directory as the dashboard to use the same `files.db`.
+These commands refresh persisted review groups without moving files, reading
+file contents, or calling AI. Group IDs remain stable across classification
+batches; membership or policy changes increment their versions. Empty groups
+retain their IDs. Unclassified, missing, and excluded files are omitted;
+protected indexed members are shown as blocked.
+
+The backend also supports frozen, paginated **draft** move/trash selections via
+`groups.freeze_selection` and `groups.batch_page`. Drafts are not approvals and
+cannot execute. Bulk dashboard review, confirmation, and execution are later
+steps in [BULK_ORGANIZATION_PLAN.md](BULK_ORGANIZATION_PLAN.md).

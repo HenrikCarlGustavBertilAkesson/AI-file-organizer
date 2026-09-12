@@ -1,6 +1,6 @@
 # Bulk File Organization and User-Directed Cleanup Plan
 
-Status: proposed; implementation has not started. This revision replaces the
+Status: Step 1 implemented; Steps 2–5 remain. This revision replaces the
 previous AI trash-assessment design.
 
 Scaling Steps 1–6 are complete. Scaling Step 7 (large-folder validation) remains
@@ -267,7 +267,7 @@ single-file move behavior. Evaluate grouping quality and user correction effort,
 not trash-detection precision or retention confidence. Focused bulk tests do not
 establish whole-Desktop readiness or replace the backlogged scaling benchmark.
 
-## First step to implement
+## Step 1 implementation status
 
 Build **Step 1: category groups and batch foundation**. Read existing indexed
 classifications and saved destinations, create stable review groups, expose
@@ -275,3 +275,19 @@ paginated members with counts and logical bytes, and define frozen operation
 manifests. Test grouping across batches and pagination, mixed categories,
 protected files, and already-organized files. This step is read-only with respect
 to user files and introduces no AI trash assessment or deletion execution.
+
+
+Implemented in `app/groups.py` with migration 9: persisted category groups and
+membership, bounded member/summary pages, stable IDs and revision tracking,
+organized/needs-move/blocked/unmapped states, and frozen draft selections.
+Use `python3 app/groups.py /path/to/workspace` to preview groups and add
+`--group ID --page 1 --page-size 50` to inspect members. Reads refresh indexed
+group membership; only the database is changed. No file contents are extracted
+or hashed, and no AI calls or filesystem mutations occur.
+
+The `freeze_selection` and `batch_page` Python APIs persist and inspect draft
+manifests. These snapshots use indexed metadata and are explicitly unapproved;
+fresh verification, confirmation, execution, and dashboard controls remain in
+later steps. Refresh streams classified metadata and pagination bounds returned
+rows, but a refresh still visits the indexed classifications; large-folder
+performance has not yet been benchmarked.
