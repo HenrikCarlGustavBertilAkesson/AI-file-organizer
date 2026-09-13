@@ -37,6 +37,9 @@ def main():
     print("\n--- AGENT RESULT ---\n")
     print(result.message)
     print(f'AI usage: {result.usage}')
+    for group in result.group_proposals:
+        print(f"Group {group['group_id']} ({group['category']}): "
+              f"{group['file_count']} proposed moves; draft batch {group['batch_id']}.")
 
     for action in result.proposed_actions:
         save_action(action)

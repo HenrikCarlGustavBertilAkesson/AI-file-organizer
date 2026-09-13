@@ -110,7 +110,7 @@ def pagination(page, page_size, total):
     return {'page': min(page, pages), 'page_size': page_size, 'total': total, 'pages': pages}
 
 
-def group_page(root, *, group_id=None, page=1, page_size=50):
+def group_page(root, *, group_id=None, page=1, page_size=50, organization_candidates=False):
     pagination(page, page_size, 0)
     root = refresh_groups(root)
     with closing(database.get_connection()) as db:
@@ -133,10 +133,15 @@ def group_page(root, *, group_id=None, page=1, page_size=50):
                            (group_id, root)).fetchone()
         if group is None:
             raise ValueError('Unknown workspace group.')
-        total = db.execute('SELECT count(*) FROM organization_group_members WHERE group_id=?', (group_id,)).fetchone()[0]
+        where = 'm.group_id=?'
+        if organization_candidates:
+            where += """ AND m.state='needs_move' AND NOT EXISTS (
+                SELECT 1 FROM actions a JOIN files f ON f.path=a.source
+                WHERE f.id=m.file_id AND a.status IN ('pending','approved'))"""
+        total = db.execute(f'SELECT count(*) FROM organization_group_members m WHERE {where}', (group_id,)).fetchone()[0]
         meta = pagination(page, page_size, total)
-        members = db.execute('''SELECT snapshot FROM organization_group_members WHERE group_id=?
-            ORDER BY file_id LIMIT ? OFFSET ?''', (group_id, page_size, (meta['page']-1)*page_size))
+        members = db.execute(f'''SELECT m.snapshot FROM organization_group_members m WHERE {where}
+            ORDER BY m.file_id LIMIT ? OFFSET ?''', (group_id, page_size, (meta['page']-1)*page_size))
         return {'group': dict(group), 'members': [json.loads(r[0]) for r in members], 'pagination': meta}
 
 

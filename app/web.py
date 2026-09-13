@@ -91,6 +91,7 @@ def dispatch(operation, data, *, progress=None):
                            progress=progress, proposal_callback=persist_proposal,
                            batch_size=data.get('batch_size', 25), max_proposals=data.get('max_proposals', 10))
         extra['usage'] = result.usage
+        extra['group_proposals'] = result.group_proposals
         for action in result.proposed_actions:
             if inside(action.source, root, scope) and inside(action.destination, root, scope):
                 database.save_action(action)

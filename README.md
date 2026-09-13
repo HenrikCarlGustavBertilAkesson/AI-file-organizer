@@ -535,3 +535,32 @@ The backend also supports frozen, paginated **draft** move/trash selections via
 `groups.freeze_selection` and `groups.batch_page`. Drafts are not approvals and
 cannot execute. Bulk dashboard review, confirmation, and execution are later
 steps in [BULK_ORGANIZATION_PLAN.md](BULK_ORGANIZATION_PLAN.md).
+
+
+## AI group-move proposals (bulk organization Step 2)
+
+After scanning/classifying and saving the organization policy, ask the existing
+organizer to “Group my work documents into their category folders.” It can now
+browse category groups, read up to 20 eligible members per tool call, and propose
+an explicit subset moving into the saved folder. Classification can still happen
+within the existing bounded candidate and AI request budgets. Each selected file
+counts toward the proposal limit, including files in a group.
+
+Group proposals persist a frozen draft batch and return individual pending moves
+through the existing review path. CLI output and dashboard job results include
+group/batch IDs and counts. Grouped dashboard selection and bulk approval remain
+Step 3; current moves still require individual confirmation. No new execution or
+deletion tool is exposed to the AI.
+
+Protected, unmapped, already-organized, and pending/approved-action files are
+omitted from eligible group member pages before pagination. Stale group versions,
+undiscovered IDs, conflicting destinations, and over-budget selections are
+rejected. Category confidence below 0.7 (or missing confidence) is flagged for
+human membership review; this is a provisional presentation rule, not a measure
+of disposal safety. Model instructions focus on category organization and leave
+all deletion decisions to the user.
+
+Tool/prompt design follows the [official function-calling guidance](https://developers.openai.com/api/docs/guides/function-calling),
+with explicit proposal-only contracts and server-side validation. Tests use mocked
+model responses; live model grouping quality and large-folder throughput remain
+unmeasured.
