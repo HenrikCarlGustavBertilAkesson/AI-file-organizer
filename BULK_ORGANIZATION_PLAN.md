@@ -1,6 +1,6 @@
 # Bulk File Organization and User-Directed Cleanup Plan
 
-Status: Step 1 implemented; Steps 2–5 remain. This revision replaces the
+Status: Steps 1–2 implemented; Steps 3–5 remain. This revision replaces the
 previous AI trash-assessment design.
 
 Scaling Steps 1–6 are complete. Scaling Step 7 (large-folder validation) remains
@@ -291,3 +291,26 @@ fresh verification, confirmation, execution, and dashboard controls remain in
 later steps. Refresh streams classified metadata and pagination bounds returned
 rows, but a refresh still visits the indexed classifications; large-folder
 performance has not yet been benchmarked.
+
+
+## Step 2 implementation status
+
+Implemented: the existing organizer now has `list_category_groups`,
+`list_group_members`, and `propose_group_move`. It reuses normalized indexed
+categories and saved destinations, classifies unclassified candidates through
+the bounded existing tool, and refreshes groups after classification. Group
+moves produce frozen draft batches plus individual pending move proposals for
+the current review workflow; they do not execute or approve any operation.
+
+Eligible members are filtered before pagination. Discovery, tool output, and
+per-file proposal budgets apply to group tools. Selected members must have been
+returned in the current run at the current group version; stale membership or
+policy, protected sources, occupied destinations, conflicting proposals, and
+same-name collisions are rejected. Uncertain category membership is flagged in
+tool results and deterministic proposal reasons for human review.
+
+Group summaries survive normal agent results and limit stops, and are included
+in CLI output and dashboard job results. Tests cover mocked agent orchestration,
+classification-to-group refresh, repeated batches, limits, cancellation, and
+validation failures. Live AI quality is not established by these tests. Bulk
+review UI, explicit group approval, execution, and recovery remain Steps 3–5.
