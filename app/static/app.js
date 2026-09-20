@@ -46,7 +46,7 @@ async function pollJob() {
     if(['queued','running','cancelling'].includes(job.status)){pollTimer=setTimeout(pollJob,750);return;}
     if(job.result){
       if(job.result.inventory)showResult(job.result);
-      else {const fresh=await api('state',{root:job.root});showResult({...fresh,...job.result});if(job.operation==='apply')$('report').replaceChildren(el('p','Index updated. Classify pending files to make contents searchable.'));}
+      else {const fresh=await api('state',{root:job.root});showResult({...fresh,...job.result});if(job.operation==='apply'&&job.result.report?.scan?.complete!==false)$('report').replaceChildren(el('p','Index updated. Classify pending files to make contents searchable.'));}
     }else{if(job.operation!=='inventory'){const fresh=await api('state',{root:job.root});showResult(fresh);}notice(job.message,job.status==='failed'?'error':'');}
     await refreshJobs();
   }catch(error){notice('Could not refresh job status: '+error.message,'error');}
@@ -92,7 +92,17 @@ function renderFiles(files) {
 function renderReport(report){const box=$('report');box.hidden=false;box.replaceChildren();let count=0;
   if(report.scan)box.append(el('p',`${report.scan.mode==='full'?'Full verification':'Quick scan'} · ${report.scan.hashed_files} files hashed · ${report.scan.reused_hashes} hashes reused`,'hint'));
   [['New files',report.new_paths],['Missing files',report.missing_paths],['Modified files',report.modified_paths],['Metadata-only updates',report.metadata_paths||[]],['Probable moves',report.probable_moves.map(move=>move.old_path+' → '+move.new_path)]].forEach(([label,paths])=>{count+=paths.length; if(paths.length){box.append(el('strong',`${label} (${paths.length})`));const list=el('ul');paths.forEach(path=>list.append(el('li',path)));box.append(list);}});
-  if(!count)box.append(el('p','No changes detected.'));
+  if(report.scan?.complete===false){
+    box.append(el('strong',`Could not verify ${report.scan.issues.length} path(s)`),
+      el('p','Verified files can still be indexed. Failed files are preserved and blocked from moves. Missing-file and probable-move detection are deferred.'));
+    const list=el('ul');
+    report.scan.issues.forEach(issue=>list.append(el('li',`${issue.path} — ${issue.message} (${issue.attempts} attempt(s))`)));
+    box.append(list);
+    const retry=el('button','Retry scan','secondary');
+    retry.onclick=()=>request('scan',{full_verification:report.scan.mode==='full'},'Retrying scan…');
+    box.append(retry);
+  }
+  if(!count)box.append(el('p',report.scan?.complete===false?'No index changes among successfully scanned files.':'No changes detected.'));
   else {const apply=el('button','Update index','secondary');apply.onclick=async()=>{const result=await request('apply',{full_verification:report.scan?.mode==='full'},'Updating your index…');if(result){box.replaceChildren(el('p','Index updated. Classify pending files to make their contents searchable.'));}};box.append(apply,el('p','Updates the local index only. Does not move or delete files.','hint'));}
 }
 $('folder-form').onsubmit=async event=>{event.preventDefault();const result=await request('inventory',{root:$('root').value},'Opening folder…');if(result){$('report').hidden=true;$('query').value='';}};

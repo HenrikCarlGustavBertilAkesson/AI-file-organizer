@@ -153,9 +153,15 @@ def _group_review(connection):
     )""")
 
 
+def _scan_issues(connection):
+    connection.execute("""CREATE TABLE scan_issues (
+        path TEXT PRIMARY KEY, kind TEXT NOT NULL, message TEXT NOT NULL
+    )""")
+
+
 MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index, _workspace_scopes,
               _background_jobs, _library_indexes, _job_ai_usage, _organization_policies,
-              _organization_groups, _group_review)
+              _organization_groups, _group_review, _scan_issues)
 
 
 def migrate(connection: sqlite3.Connection) -> None:

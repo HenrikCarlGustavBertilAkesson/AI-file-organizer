@@ -2,6 +2,7 @@ from pathlib import Path
 
 from models import ProposedAction
 from workspace import load_scope
+from scan_health import verification_error
 from organization_policy import validate_policy_action
 
 
@@ -20,6 +21,10 @@ def validate_action(
 
     if action.action_type != "move":
         return False, f"Unsupported action: {action.action_type}"
+
+    error = verification_error(action.source)
+    if error:
+        return False, error
 
     root = Path(allowed_root)
 

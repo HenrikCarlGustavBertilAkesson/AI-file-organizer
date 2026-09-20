@@ -589,3 +589,33 @@ request a new proposal for remaining files. Automatic group Undo/Restore, editin
 selected members, and bulk deletion are still future work. A process failure after
 a filesystem move can require index reconciliation; the saved intent/outcome
 prevents automatically retrying that batch.
+
+
+## Scanning files that change or cannot be read
+
+Scanning hashes raw bytes, independently of PDF/document text extraction. It now
+hashes through one open file handle and compares metadata and filesystem identity
+before and after reading, including checking that the path still names the same
+file. Temporary changes or transient busy I/O are retried up to three times with
+short delays. Diagnostics identify changed fields, including size, modification
+time, metadata-change time, or file identity; metadata-only changes are retried
+rather than silently ignored.
+
+A persistently unstable or unreadable file is reported and skipped while the
+rest of the scan continues. Dashboard and CLI reports list affected paths and
+attempt counts, and the dashboard offers **Retry scan**. Unreadable directories
+are reported as directory issues. Hash reuse in quick mode is still a metadata
+optimization, not full content verification.
+
+On an incomplete scan, index updates apply only successfully scanned files.
+Existing failed-file records and classifications are preserved. All missing-file
+and probable-move inference is deferred until a complete scan, preventing an
+unreadable file or directory from being treated as deleted.
+
+Migration 11 adds separate scan-safety markers. Even a preview scan records
+failed paths so existing and new move proposals cannot use unverified sources;
+it does not update indexed content or classification. A later scan forces fresh
+hashing for affected files, even when cached size/time match, and clears their
+markers after verification. Cancellation still prevents index repairs and retains
+known failures. A background scan with isolated failures finishes with a visible
+issue report instead of discarding the successful results.

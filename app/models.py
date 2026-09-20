@@ -57,10 +57,22 @@ class DetectedMove:
     new_path: str
 
 @dataclass
+class ScanIssue:
+    path: str
+    kind: str
+    message: str
+    attempts: int = 1
+    changed_fields: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ScanStats:
     mode: str = 'quick'
     hashed_files: int = 0
     reused_hashes: int = 0
+    retries: int = 0
+    complete: bool = True
+    issues: list[ScanIssue] = field(default_factory=list)
 
 @dataclass
 class ReconciliationResult:
