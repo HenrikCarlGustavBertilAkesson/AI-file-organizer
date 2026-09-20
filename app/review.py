@@ -8,6 +8,7 @@ from models import ActionStatus, ProposedAction
 
 from actions.validator import validate_action
 from actions.executor import execute_action
+from group_review import belongs_to_pending_group, proposal_page, review_group
 
 
 def _process_single_action(action: ProposedAction, allowed_root: str):
@@ -17,6 +18,8 @@ def _process_single_action(action: ProposedAction, allowed_root: str):
 
 def review_action(action: ProposedAction, allowed_root: str, answer: str):
     """Shared CLI/browser decision path; execution still revalidates approval."""
+    if belongs_to_pending_group(action, allowed_root):
+        raise ValueError('This move belongs to a group. Review the group proposal instead.')
     if action.status != ActionStatus.PENDING:
         raise ValueError("This proposal has already been reviewed.")
 
@@ -59,7 +62,32 @@ def review_action(action: ProposedAction, allowed_root: str, answer: str):
 
 
 def review_pending_actions(allowed_root: str):
-    actions = get_pending_actions()
+    # Freeze the list of pending group IDs before decisions reorder the cards.
+    pending = []
+    page = 1
+    while True:
+        result = proposal_page(allowed_root, page=page)
+        pending.extend(g for g in result['group_actions'] if g['status']=='pending')
+        if page >= result['group_action_pagination']['pages']:
+            break
+        page += 1
+    for group in pending:
+        print(f"\nGroup #{group['batch_id']}: {group['file_count']} files → {group['destination']}")
+        page = 1
+        while True:
+            result = proposal_page(allowed_root, batch_id=group['batch_id'], member_page=page)
+            for member in result['members']:
+                print(f"  {member['path']} → {member['destination']}")
+            if page >= result['pagination']['pages']:
+                break
+            page += 1
+        answer = input('Approve this entire group? [y]es / [n]o / [s]kip: ').lower()
+        if answer in ('y', 'n'):
+            try:
+                print(review_group(allowed_root, group['batch_id'], group['token'], answer)['message'])
+            except (ValueError, OSError) as error:
+                print(f'Group stopped: {error}')
+    actions = [a for a in get_pending_actions() if not belongs_to_pending_group(a, allowed_root)]
 
     if not actions:
         print("\nNo pending actions.")

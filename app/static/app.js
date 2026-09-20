@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 let root = '', state = null;
-let libraryOptions={page:1,page_size:50,status:'',category:null,query:'',action_page:1};
+let libraryOptions={page:1,page_size:50,status:'',category:null,query:'',action_page:1,group_action_page:1};
 const token = document.querySelector('meta[name="app-token"]').content;
 $('root').value = localStorage.getItem('organizer-folder') || '';
 function el(tag, text, className) {const node = document.createElement(tag); if(text !== undefined) node.textContent = text; if(className) node.className = className; return node;}
@@ -12,7 +12,7 @@ async function api(operation, data={}) {
 }
 function showResult(result) {
   root=result.root; state=result; $('root').value=root; localStorage.setItem('organizer-folder',root);
-  if(result.inventory){libraryOptions={page:1,page_size:50,status:'',category:null,query:'',action_page:1};$('status-filter').value='';$('category-filter').value='*';$('page-size').value='50';renderInventory(result.inventory);$('workspace').hidden=true;$('report').hidden=true;$('query').value='';}
+  if(result.inventory){libraryOptions={page:1,page_size:50,status:'',category:null,query:'',action_page:1,group_action_page:1};$('status-filter').value='';$('category-filter').value='*';$('page-size').value='50';renderInventory(result.inventory);$('workspace').hidden=true;$('report').hidden=true;$('query').value='';}
   else if(result.files){$('workspace').hidden=false;render(result);}
   notice(result.message||'Your workspace is up to date.');
 }
@@ -34,7 +34,7 @@ function showJob(job) {
   if(job.total===null){$('job-progress').removeAttribute('value');}else{$('job-progress').max=job.total||1;$('job-progress').value=job.completed;}
   const active=['queued','running','cancelling'].includes(job.status);
   $('cancel-job').hidden=!active; $('cancel-job').disabled=job.status==='cancelling';
-  $('resume-job').hidden=!['cancelled','interrupted','failed'].includes(job.status);
+  $('resume-job').hidden=job.operation==='review-group'||!['cancelled','interrupted','failed'].includes(job.status);
 }
 function watchJob(job) {
   clearTimeout(pollTimer);showJob(job);
@@ -61,7 +61,7 @@ $('cancel-job').onclick=async()=>{try{const result=await api('cancel-job',{id:cu
 $('resume-job').onclick=async()=>{try{const result=await api('resume-job',{id:currentJob.id,root:currentJob.root});watchJob(result.job);}catch(error){notice(error.message,'error');}};
 function render(data) {
   renderPolicy(data.policy);
-  $('total').textContent=data.summary.total; $('pending').textContent=data.summary.pending; $('proposals').textContent=data.action_pagination.total;
+  $('total').textContent=data.summary.total; $('pending').textContent=data.summary.pending; $('proposals').textContent=data.action_pagination.total+(data.pending_group_count||0);
   renderFiles(data.files);
   libraryOptions.page=data.pagination.page;libraryOptions.action_page=data.action_pagination.page;
   $('page-label').textContent=`Page ${data.pagination.page} of ${data.pagination.pages}`;
@@ -72,7 +72,8 @@ function render(data) {
   $('category-filter').replaceChildren(new Option('All categories','*'));
   data.categories.forEach(category=>$('category-filter').append(new Option(category||'Uncategorized',category)));
   $('category-filter').value=libraryOptions.category===null?'*':libraryOptions.category; $('actions').replaceChildren();
-  if(!data.actions.length) $('actions').append(el('p','No proposals waiting. Ask for organization suggestions above.','empty'));
+  renderGroupActions(data);
+  if(!data.actions.length && !data.group_actions?.length) $('actions').append(el('p','No proposals waiting. Ask for organization suggestions above.','empty'));
   data.actions.forEach(action=>{const card=el('article',undefined,'proposal'); card.append(el('strong',action.source.split('/').pop()));
     card.append(el('p','From: '+action.source,'path'),el('p','To: '+action.destination,'path'),el('p',action.reason||'No reason supplied.'));
     if(!action.valid) card.append(el('p',action.validation_error));
@@ -154,3 +155,52 @@ $('save-policy').onclick=()=>{
   const rules=[...document.querySelectorAll('.policy-rule')].map(row=>({category:row.querySelector('.rule-category').value,folder:row.querySelector('.rule-folder').value}));
   request('save-policy',{rules,protected_folders:$('protected-folders').value.split('\n').map(value=>value.trim()).filter(Boolean)},'Saving organization rules…');
 };
+
+
+function renderGroupActions(data) {
+  const meta=data.group_action_pagination;
+  if(!meta)return;
+  (data.group_actions||[]).forEach(group=>{
+    const card=el('article',undefined,'proposal');
+    card.append(el('strong',`${group.category || 'Category'} — ${group.file_count} files`),
+      el('p',`Move together to: ${group.destination}`,'path'),
+      el('p',`${(group.total_bytes/1048576).toFixed(1)} MB · ${group.status}`));
+    if(group.message)card.append(el('p',group.message));
+    const details=el('details'), heading=el('summary','Review included files and outcomes');
+    const contents=el('div');details.append(heading,contents);card.append(details);
+    let loaded=false;
+    async function loadMembers(page=1) {
+      try {
+        const result=await api('group-members',{batch_id:group.batch_id,member_page:page});
+        contents.replaceChildren();
+        result.members.forEach(file=>{
+          contents.append(el('p',`${file.filename} · ${file.outcome}${file.confidence == null || file.confidence < 0.7?' · Check category membership':''}`),
+            el('p',`${file.path} → ${file.destination}`,'path'));
+          if(file.error)contents.append(el('p',file.error));
+        });
+        const row=el('div',undefined,'row'), previous=el('button','Previous files','quiet'), next=el('button','Next files','quiet');
+        previous.disabled=result.pagination.page<=1;next.disabled=result.pagination.page>=result.pagination.pages;
+        previous.onclick=()=>loadMembers(result.pagination.page-1);next.onclick=()=>loadMembers(result.pagination.page+1);
+        row.append(previous,el('span',`Page ${result.pagination.page} of ${result.pagination.pages}`),next);contents.append(row);loaded=true;
+      }catch(error){contents.replaceChildren(el('p',error.message));}
+    }
+    details.ontoggle=()=>{if(details.open&&!loaded)loadMembers();};
+    if(group.status==='pending') {
+      card.append(el('p',`Approval applies to exactly these ${group.file_count} files. New files are not included.`,'hint'));
+      const row=el('div',undefined,'row'), reject=el('button','Reject group','quiet'), approve=el('button',`Approve & move all ${group.file_count} files`);
+      async function decide(decision) {
+        reject.disabled=true;approve.disabled=true;
+        const result=await request('review-group',{batch_id:group.batch_id,token:group.token,decision},decision==='y'?'Moving approved group…':'Rejecting group…');
+        if(!result&&!['queued','running','cancelling'].includes(currentJob?.status)){reject.disabled=false;approve.disabled=false;}
+      }
+      reject.onclick=()=>decide('n');approve.onclick=()=>decide('y');row.append(reject,approve);card.append(row);
+    }
+    $('actions').append(card);
+  });
+  if(meta.pages>1){
+    const row=el('div',undefined,'row'), previous=el('button','Previous groups','quiet'), next=el('button','Next groups','quiet');
+    previous.disabled=meta.page<=1;next.disabled=meta.page>=meta.pages;
+    previous.onclick=()=>request('state',{group_action_page:meta.page-1});next.onclick=()=>request('state',{group_action_page:meta.page+1});
+    row.append(previous,el('span',`Groups: page ${meta.page} of ${meta.pages}`),next);$('actions').append(row);
+  }
+}

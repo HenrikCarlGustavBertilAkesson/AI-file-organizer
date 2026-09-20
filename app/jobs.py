@@ -8,7 +8,7 @@ import time
 import database
 from ai.runtime import usage_scope, bounded_int
 
-OPERATIONS = {'inventory', 'scan', 'apply', 'classify', 'organize'}
+OPERATIONS = {'inventory', 'scan', 'apply', 'classify', 'organize', 'review-group'}
 ACTIVE = {'queued', 'running', 'cancelling'}
 
 
@@ -75,6 +75,10 @@ class JobManager:
                                "message='Server stopped. Resume to continue remaining work.' "
                                "WHERE status IN ('queued','running','cancelling')")
 
+            connection.execute("UPDATE group_reviews SET status='needs_review', "
+                               "message='Server stopped during group review. Inspect per-file outcomes before creating another proposal.' "
+                               "WHERE status='running'")
+
     def busy(self):
         return self.active_id is not None
 
@@ -116,7 +120,8 @@ class JobManager:
             # Large file/action tables are refreshed separately by the UI.
             result = {key: value for key, value in result.items()
                       if key not in ('files', 'actions', 'summary', 'categories',
-                                     'pagination', 'action_pagination', 'policy')}
+                                     'pagination', 'action_pagination', 'policy', 'group_actions',
+                                     'group_action_pagination', 'pending_group_count')}
             update(job_id, status='succeeded', result=json.dumps(result),
                    message=result.get('message') or 'Completed.')
         except JobCancelled as error:
@@ -138,6 +143,8 @@ class JobManager:
 
     def resume(self, job_id):
         job = get_job(job_id)
+        if job['operation'] == 'review-group':
+            raise ValueError('Group moves cannot be replayed. Review the remaining files and create a new proposal.')
         if job['status'] not in ('cancelled', 'interrupted', 'failed'):
             raise ValueError('Only stopped or failed jobs can be resumed.')
         if job['operation'] in ('scan', 'apply'):

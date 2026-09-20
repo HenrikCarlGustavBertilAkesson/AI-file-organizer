@@ -1,6 +1,7 @@
 # Bulk File Organization and User-Directed Cleanup Plan
 
-Status: Steps 1–2 implemented; Steps 3–5 remain. This revision replaces the
+Status: Steps 1–2 implemented. Group move approval and execution are implemented;
+Steps 3–5 remain partially unfinished. This revision replaces the
 previous AI trash-assessment design.
 
 Scaling Steps 1–6 are complete. Scaling Step 7 (large-folder validation) remains
@@ -314,3 +315,23 @@ in CLI output and dashboard job results. Tests cover mocked agent orchestration,
 classification-to-group refresh, repeated batches, limits, cancellation, and
 validation failures. Live AI quality is not established by these tests. Bulk
 review UI, explicit group approval, execution, and recovery remain Steps 3–5.
+
+
+## Group approval follow-up
+
+Implemented after Step 2: saved group-move drafts now render as multi-file proposal
+cards with paginated member review and one explicit approval/rejection for the
+whole frozen manifest. Duplicate individual cards are suppressed. CLI review also
+supports one decision per group. Migration 10 stores group review status and
+per-file execution outcomes.
+
+Approved group moves run as background jobs, with manifest-bound confirmation,
+whole-group preflight, fresh file verification, per-file revalidation, progress,
+and cancellation between files. Completed changes remain completed. Interrupted
+or uncertain batches are marked for review and cannot be replayed automatically;
+remaining files require a new proposal after reconciliation. Tests include a
+failure after a successful move but before index update.
+
+This implements the whole-group move path from Steps 3–4, not all of those steps.
+Editable multi-group selections, category corrections in the group dashboard,
+bulk Delete, automatic Undo/Restore, and the broader recovery/rollout work remain.
