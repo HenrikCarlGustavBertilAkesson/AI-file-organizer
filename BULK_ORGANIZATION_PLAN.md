@@ -335,3 +335,12 @@ failure after a successful move but before index update.
 This implements the whole-group move path from Steps 3–4, not all of those steps.
 Editable multi-group selections, category corrections in the group dashboard,
 bulk Delete, automatic Undo/Restore, and the broader recovery/rollout work remain.
+
+
+## Large-group efficiency follow-up
+
+The next organization-efficiency improvement is planned in
+[LARGE_GROUP_ORGANIZATION_PLAN.md](LARGE_GROUP_ORGANIZATION_PLAN.md). It separates
+new-classification limits from group-proposal counts and lets the backend assemble
+large frozen proposals from the eligible index. That roadmap is not yet implemented
+and does not replace the unfinished deletion and recovery work described above.

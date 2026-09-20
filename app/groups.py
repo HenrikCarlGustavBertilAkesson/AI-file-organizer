@@ -13,6 +13,7 @@ import sqlite3
 
 import database
 from library import page_number
+from scan_health import verification_error, load_issues
 from organization_policy import load_policy, protected_reason
 from workspace import load_scope, WorkspaceScope, DEFAULT_EXCLUSIONS
 
@@ -53,6 +54,7 @@ def refresh_groups(root):
         groups = {row['category']: dict(row) for row in db.execute(
             'SELECT * FROM organization_groups WHERE root=?', (str(root),))}
         changed = set()
+        scan_issues = load_issues()
         for row in db.execute("""SELECT id,path,filename,size,modified,hash,category,confidence
                                  FROM files WHERE is_present=1 AND status='classified' ORDER BY id"""):
             category = (row['category'] or '').strip().casefold()
@@ -65,7 +67,7 @@ def refresh_groups(root):
                     VALUES (?,?,?,?)''', (str(root), category, destination, config)).lastrowid
                 groups[category] = {'id': gid, 'destination': destination, 'context': config}
             group = groups[category]
-            reason = protected_reason(row['path'], root, policy.protected_folders if policy else [])
+            reason = verification_error(row['path'], scan_issues) or protected_reason(row['path'], root, policy.protected_folders if policy else [])
             target = str(Path(destination) / Path(row['path']).name) if destination else None
             if not reason and target:
                 if not scope.allows(target):

@@ -134,8 +134,9 @@ class WorkspaceTests(unittest.TestCase):
         with patch('scanner.os.scandir', side_effect=scandir):
             self.assertEqual(len(scan_directory(str(self.root), scope=scope)), 1)
             self.scope(['Docs', 'Private'], loose=False)
-            with self.assertRaises(ScanError):
-                reconcile_directory(str(self.root), apply=True)
+            result = reconcile_directory(str(self.root), apply=True)
+            self.assertFalse(result.scan.complete)
+            self.assertEqual(result.missing_paths, [])
 
     def test_validator_and_dashboard_honor_scope(self):
         source = self.file('Docs/file.txt')

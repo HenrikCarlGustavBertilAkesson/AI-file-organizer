@@ -92,7 +92,7 @@ class SearchTests(unittest.TestCase):
             connection.execute("DROP TABLE files_fts")
             connection.execute("DROP TABLE workspaces")
             connection.execute("DROP TABLE organization_policies")
-            for table in ('group_review_items', 'group_reviews', 'organization_batch_members', 'organization_batches',
+            for table in ('scan_issues', 'group_review_items', 'group_reviews', 'organization_batch_members', 'organization_batches',
                           'organization_group_members', 'organization_groups'):
                 connection.execute(f"DROP TABLE {table}")
             connection.execute("DROP TABLE jobs")

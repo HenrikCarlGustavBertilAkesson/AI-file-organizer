@@ -132,20 +132,23 @@ class IncrementalScanTests(unittest.TestCase):
         (self.root / 'unreadable.txt').write_text('new')
         before = database.get_all_files()
         with patch('scanner.calculate_hash', side_effect=PermissionError('denied')):
-            with self.assertRaises(ScanError):
-                reconcile_directory(str(self.root), apply=True)
+            result = reconcile_directory(str(self.root), apply=True)
+        self.assertFalse(result.scan.complete)
+        self.assertEqual(result.missing_paths, [])
         self.assertEqual(database.get_all_files(), before)
 
-    def test_file_changing_while_hashed_aborts(self):
+    def test_file_changing_while_hashed_is_reported_after_three_attempts(self):
         path = self.indexed()
         before = database.get_all_files()
         def changed(file_path):
             result = calculate_hash(file_path)
-            file_path.write_text('modified during hash')
+            Path(file_path.name).write_text('modified during hash')
             return result
         with patch('scanner.calculate_hash', side_effect=changed):
-            with self.assertRaisesRegex(ScanError, 'changed while hashing'):
-                reconcile_directory(str(self.root), full_verification=True, apply=True)
+            result = reconcile_directory(str(self.root), full_verification=True, apply=True)
+        self.assertEqual(result.scan.retries, 2)
+        self.assertEqual(result.scan.issues[0].attempts, 3)
+        self.assertIn('changed while hashing', result.scan.issues[0].message)
         self.assertEqual(database.get_all_files(), before)
 
     def test_background_job_preserves_full_verification_mode(self):

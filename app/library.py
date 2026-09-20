@@ -7,6 +7,7 @@ import sqlite3
 
 import database
 from workspace import load_scope
+from scan_health import verification_error, load_issues
 
 
 def page_number(value, name):
@@ -54,7 +55,10 @@ def library_page(root, *, page=1, page_size=50, status='', category=None, query=
         if organization_candidates:
             from organization_policy import load_policy, protected_reason
             policy = load_policy(root)
+            scan_issues = load_issues()
             def needs_organization(path, filename, category, status):
+                if verification_error(path, scan_issues):
+                    return False
                 if policy is None or protected_reason(path, root, policy.protected_folders):
                     return False
                 if status in ('unsupported', 'empty', 'failed'):

@@ -7,6 +7,7 @@ from database import create_database, get_all_files, get_connection, save_file
 from models import DetectedMove, ReconciliationResult, ScanStats
 from scanner import scan_directory
 from workspace import load_scope
+from scan_health import load_issues, record_scan
 
 
 def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None,
@@ -23,22 +24,29 @@ def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None
              if Path(row['path']).is_relative_to(root)
              and (scope is None or scope.allows(row['path']))}
     stats = ScanStats()
-    scanned_files = scan_directory(str(root), scope=scope, progress=progress,
-                                   indexed_files=cache, full_verification=full_verification, stats=stats)
+    try:
+        scanned_files = scan_directory(str(root), scope=scope, progress=progress,
+                                       indexed_files=cache, full_verification=full_verification,
+                                       stats=stats, unverified_paths=load_issues())
+    except Exception:
+        record_scan(root, [], stats, scope, finished=False)
+        raise
+    record_scan(root, scanned_files, stats, scope)
     if not apply:
-        result = compare_files(root, scanned_files, indexed_files, scope=scope)
+        result = compare_files(root, scanned_files, indexed_files, scope=scope, complete=stats.complete)
         result.scan = stats
         return result
 
     # Read and repair the index under one write transaction. Scanning must
-    # finish successfully before we acquire the lock or change any records.
+    # finish before we acquire the lock. Incomplete scans apply verified updates
+    # only; missing-file and move inference are deferred.
     if progress:
         progress(message='Applying index repairs atomically…', force=True)
     with closing(get_connection()) as connection:
         with connection:
             connection.execute("BEGIN IMMEDIATE")
             indexed_files = get_all_files(connection, columns=columns)
-            result = compare_files(root, scanned_files, indexed_files, scope=scope)
+            result = compare_files(root, scanned_files, indexed_files, scope=scope, complete=stats.complete)
             result.scan = stats
             scanned_by_path = {file.path: file for file in scanned_files}
             indexed_by_path = {row["path"]: row for row in indexed_files}
@@ -85,7 +93,7 @@ def reconcile_directory(allowed_root: str, *, apply: bool = False, progress=None
     return result
 
 
-def compare_files(root, scanned_files, indexed_files, *, scope=None) -> ReconciliationResult:
+def compare_files(root, scanned_files, indexed_files, *, scope=None, complete=True) -> ReconciliationResult:
 
     scanned_by_path = {
         file.path: file
@@ -103,7 +111,7 @@ def compare_files(root, scanned_files, indexed_files, *, scope=None) -> Reconcil
     }
 
     new_paths = scanned_by_path.keys() - indexed_by_path.keys()
-    missing_paths = indexed_by_path.keys() - scanned_by_path.keys()
+    missing_paths = (indexed_by_path.keys() - scanned_by_path.keys()) if complete else set()
     # A missing legacy hash cannot establish unchanged contents, so queue
     # those records for processing too.
     modified_paths = [
@@ -153,6 +161,11 @@ def print_reconciliation(result: ReconciliationResult) -> None:
     print(f'\n{result.scan.mode.title()} scan: {result.scan.hashed_files} files hashed; '
           f'{result.scan.reused_hashes} stored hashes reused.')
 
+    if not result.scan.complete:
+        print('Incomplete scan: missing-file and probable-move detection deferred.')
+    for issue in result.scan.issues:
+        print(f'  Could not verify {issue.path} ({issue.attempts} attempt(s)): {issue.message}')
+
     print(f"\nNew files: {len(result.new_paths)}")
     for path in result.new_paths:
         print(f"  + {path}")
@@ -174,7 +187,7 @@ def print_reconciliation(result: ReconciliationResult) -> None:
 
     if not any((result.new_paths, result.missing_paths,
                 result.probable_moves, result.modified_paths, result.metadata_paths)):
-        print("\nNo changes detected.")
+        print("\nNo changes detected in successfully scanned files." if not result.scan.complete else "\nNo changes detected.")
 
 if __name__ == "__main__":
     import argparse
