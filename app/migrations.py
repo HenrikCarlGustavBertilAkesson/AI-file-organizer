@@ -141,9 +141,21 @@ def _organization_groups(connection):
     )""")
 
 
+def _group_review(connection):
+    connection.execute("""CREATE TABLE group_reviews (
+        batch_id INTEGER PRIMARY KEY, status TEXT NOT NULL,
+        message TEXT NOT NULL DEFAULT '', updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    connection.execute("""CREATE TABLE group_review_items (
+        batch_id INTEGER NOT NULL, file_id INTEGER NOT NULL,
+        status TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY(batch_id,file_id)
+    )""")
+
+
 MIGRATIONS = (_initial_schema, _legacy_file_columns, _search_index, _workspace_scopes,
               _background_jobs, _library_indexes, _job_ai_usage, _organization_policies,
-              _organization_groups)
+              _organization_groups, _group_review)
 
 
 def migrate(connection: sqlite3.Connection) -> None:

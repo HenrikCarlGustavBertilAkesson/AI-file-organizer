@@ -97,13 +97,19 @@ def library_page(root, *, page=1, page_size=50, status='', category=None, query=
             files.status, files.is_present, {snippet}
             FROM {source} WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?''',
             (*parameters, page_size, (page-1)*page_size)).fetchall()
-        action_where = "status='pending' AND in_scope(source) AND in_scope(destination)"
-        action_count = connection.execute(f'SELECT count(*) FROM actions WHERE {action_where}').fetchone()[0]
+        action_where = """status='pending' AND in_scope(source) AND in_scope(destination)
+            AND NOT EXISTS (SELECT 1 FROM organization_batch_members m
+                JOIN organization_batches b ON b.id=m.batch_id
+                LEFT JOIN group_reviews r ON r.batch_id=b.id
+                WHERE b.root=? AND b.operation='move' AND (r.status IS NULL OR r.status='running')
+                AND json_extract(m.snapshot,'$.path')=actions.source
+                AND json_extract(m.snapshot,'$.destination')=actions.destination)"""
+        action_count = connection.execute(f'SELECT count(*) FROM actions WHERE {action_where}', (str(root),)).fetchone()[0]
         action_pages = max(1, math.ceil(action_count / 20))
         action_page = min(action_page, action_pages)
         actions = connection.execute(f'''SELECT id, action_type, source, destination, reason, status, error
             FROM actions WHERE {action_where} ORDER BY id LIMIT 20 OFFSET ?''',
-            ((action_page-1)*20,)).fetchall()
+            (str(root), (action_page-1)*20)).fetchall()
     return {'files': [dict(row) for row in rows], 'summary': summary, 'categories': categories,
             'pagination': {'page': page, 'page_size': page_size, 'total': total, 'pages': pages},
             'actions': [dict(row) for row in actions],

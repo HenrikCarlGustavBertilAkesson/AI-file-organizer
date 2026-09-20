@@ -9,6 +9,7 @@ import database
 from reconciliation import reconcile_directory
 from process_pending import process_pending
 from review import review_action
+from group_review import proposal_page, review_group
 from actions.validator import validate_action
 from workspace import inventory, load_scope, save_scope
 from jobs import JobManager, OPERATIONS, get_job, recent_jobs
@@ -41,7 +42,8 @@ def snapshot(root, options=None):
     for data in result['actions']:
         action = ProposedAction(**data)
         data['valid'], data['validation_error'] = validate_action(action, str(root))
-    return {'root': str(root), **result, 'policy': policy_view(root)}
+    return {'root': str(root), **result, 'policy': policy_view(root),
+            **proposal_page(root, page=options.get('group_action_page', 1))}
 
 
 def dispatch(operation, data, *, progress=None):
@@ -61,6 +63,11 @@ def dispatch(operation, data, *, progress=None):
     extra = {}
     if operation == 'state':
         pass
+    elif operation == 'group-members':
+        return {'root': str(root), **proposal_page(root, batch_id=data.get('batch_id'), member_page=data.get('member_page', 1))}
+    elif operation == 'review-group':
+        extra = review_group(root, data.get('batch_id'), data.get('token'), data.get('decision'), progress=progress)
+        message = extra['message']
     elif operation in ('scan', 'apply'):
         result = reconcile_directory(str(root), apply=operation == 'apply', progress=progress,
                                      full_verification=data.get('full_verification', False))

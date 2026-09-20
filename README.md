@@ -532,9 +532,9 @@ retain their IDs. Unclassified, missing, and excluded files are omitted;
 protected indexed members are shown as blocked.
 
 The backend also supports frozen, paginated **draft** move/trash selections via
-`groups.freeze_selection` and `groups.batch_page`. Drafts are not approvals and
-cannot execute. Bulk dashboard review, confirmation, and execution are later
-steps in [BULK_ORGANIZATION_PLAN.md](BULK_ORGANIZATION_PLAN.md).
+`groups.freeze_selection` and `groups.batch_page`. Drafts are not approvals.
+Saved move drafts can now be reviewed and approved as groups in the dashboard
+and CLI; see the group approval workflow below.
 
 
 ## AI group-move proposals (bulk organization Step 2)
@@ -546,11 +546,11 @@ an explicit subset moving into the saved folder. Classification can still happen
 within the existing bounded candidate and AI request budgets. Each selected file
 counts toward the proposal limit, including files in a group.
 
-Group proposals persist a frozen draft batch and return individual pending moves
-through the existing review path. CLI output and dashboard job results include
-group/batch IDs and counts. Grouped dashboard selection and bulk approval remain
-Step 3; current moves still require individual confirmation. No new execution or
-deletion tool is exposed to the AI.
+Group proposals persist a frozen draft batch with individual move records for
+tracking. The dashboard shows one group proposal, suppressing duplicate individual
+cards. One explicit approval moves the fixed set of files. CLI review likewise
+asks once per group. The AI cannot approve or execute moves and has no deletion
+tool.
 
 Protected, unmapped, already-organized, and pending/approved-action files are
 omitted from eligible group member pages before pagination. Stale group versions,
@@ -564,3 +564,28 @@ Tool/prompt design follows the [official function-calling guidance](https://deve
 with explicit proposal-only contracts and server-side validation. Tests use mocked
 model responses; live model grouping quality and large-folder throughput remain
 unmeasured.
+
+
+## Approve a group of moves
+
+Restart the dashboard (`python3 app/web.py`) to apply migration 10, then open your
+workspace. Existing saved group-move drafts appear under **Review proposed moves**
+as one card with the category, shared destination, file count, and total bytes.
+Expand **Review included files and outcomes** to browse the complete paginated
+selection. **Approve & move all N files** authorizes exactly that saved selection;
+**Reject group** dismisses it. Individual proposals outside groups still have
+individual approval buttons.
+
+The dashboard runs approved group moves in the background. It verifies every
+source against the frozen hash/metadata and current scope/policy before any move,
+then checks each file again immediately before moving it. Files added to a category
+after the draft was created are not included. Legacy drafts without a valid hash
+require a rescan and a new proposal.
+
+Progress and per-file outcomes are retained. Cancellation stops between files;
+already completed moves remain completed. Interrupted or failed group moves cannot
+be replayed through **Resume**. Inspect outcomes, rescan/update the index, and
+request a new proposal for remaining files. Automatic group Undo/Restore, editing
+selected members, and bulk deletion are still future work. A process failure after
+a filesystem move can require index reconciliation; the saved intent/outcome
+prevents automatically retrying that batch.
